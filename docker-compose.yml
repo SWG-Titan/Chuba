@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  chuba:
+    build: .
+    container_name: chuba-tracker
+    ports:
+      - "3000:3000"
+    volumes:
+      - chuba-data:/app/data
+      - ${SCHEMATIC_SOURCE_PATH:-/home/swg/swg-main/dsrc/sku.0/sys.server/compiled/game/object/draft_schematic}:/schematics:ro
+    environment:
+      - NODE_ENV=production
+      - ORACLE_USER=${ORACLE_USER}
+      - ORACLE_PASSWORD=${ORACLE_PASSWORD}
+      - ORACLE_CONNECTION_STRING=${ORACLE_CONNECTION_STRING}
+      - LOCAL_DB_PATH=/app/data/chuba.db
+      - SCHEMATIC_SOURCE_PATH=/schematics
+      - POLL_INTERVAL_MINUTES=${POLL_INTERVAL_MINUTES:-5}
+      - API_PORT=3000
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - DISCORD_WEBHOOK_URL=${DISCORD_WEBHOOK_URL:-}
+      - ENABLE_DISCORD_ALERTS=${ENABLE_DISCORD_ALERTS:-false}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  chuba-data:
+    driver: local
+

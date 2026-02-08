@@ -1,0 +1,1258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chuba - Titan Tracker</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Three.js for 3D model rendering -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <!-- Note: Three.js is still used by the model viewer, not terrain -->
+  <!-- Chart.js for dashboard charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen">
+      <div class="login-container">
+        <div class="login-header">
+          <span class="logo-icon">⚗️</span>
+          <h1>Chuba</h1>
+          <p>Titan Tracker</p>
+        </div>
+        <form id="loginForm" class="login-form" onsubmit="return false;">
+          <div class="form-group">
+            <label for="username">Username</label>
+            <input type="text" id="username" name="username" required autocomplete="username" />
+          </div>
+          <div class="form-group">
+            <label for="password">Password</label>
+            <input type="password" id="password" name="password" required autocomplete="current-password" />
+          </div>
+          <div id="loginError" class="login-error"></div>
+          <button type="submit" class="btn btn-primary btn-full" id="loginBtn">
+            <span>Sign In</span>
+          </button>
+        </form>
+        <div class="login-footer">
+          <p>Authenticate with your SWG Titan account.</p>
+            <!--Forgot password prompt -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Application (hidden until authenticated) -->
+    <div id="mainApp" class="main-app hidden">
+      <!-- Header -->
+      <header class="header">
+        <div class="header-content">
+          <div class="logo">
+            <span class="logo-icon">⚗️</span>
+            <h1>Chuba</h1>
+            <span class="logo-subtitle">Titan Tracker</span>
+          </div>
+          <nav class="nav">
+            <button class="nav-btn active" data-view="dashboard">Dashboard</button>
+            <button class="nav-btn" data-view="resources">Resources</button>
+            <button class="nav-btn" data-view="schematics">Schematic Datapad</button>
+            <button class="nav-btn" data-view="items">Armory</button>
+            <button class="nav-btn" data-view="quests">Quest Journal</button>
+            <button class="nav-btn" data-view="terrain">Cartographer</button>
+            <div class="nav-dropdown" style="position: relative; display: inline-block;">
+              <button class="nav-btn" id="lookupDropdownBtn">Lookup &#9662;</button>
+              <div class="nav-dropdown-menu" id="lookupDropdownMenu" style="display: none; position: absolute; top: 100%; left: 0; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 8px; min-width: 140px; z-index: 100; box-shadow: 0 8px 24px rgba(0,0,0,0.4); overflow: hidden;">
+                <button class="nav-dropdown-item" data-view="playerLookup" style="display: block; width: 100%; padding: 10px 16px; border: none; background: transparent; color: var(--text-primary); text-align: left; cursor: pointer; font-size: 0.85rem; font-family: var(--font-body);" onmouseenter="this.style.background='var(--bg-tertiary)'" onmouseleave="this.style.background='transparent'">Players</button>
+                <button class="nav-dropdown-item" data-view="cityLookup" style="display: block; width: 100%; padding: 10px 16px; border: none; background: transparent; color: var(--text-primary); text-align: left; cursor: pointer; font-size: 0.85rem; font-family: var(--font-body);" onmouseenter="this.style.background='var(--bg-tertiary)'" onmouseleave="this.style.background='transparent'">Cities</button>
+              </div>
+            </div>
+            <button class="nav-btn admin-only hidden" data-view="admin">Admin Panel</button>
+          </nav>
+          <div class="header-actions">
+            <div class="status-indicator" id="statusIndicator">
+              <span class="status-dot"></span>
+              <span class="status-text">Connecting...</span>
+            </div>
+            <div class="user-menu">
+              <span id="currentUser" class="user-name"></span>
+              <button class="btn btn-sm" onclick="logout()">Logout</button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Main Content -->
+      <main class="main">
+        <!-- Dashboard View -->
+        <section id="dashboardView" class="view active">
+          <div class="dashboard-grid">
+            <!-- Server Status Hero -->
+            <div class="card" style="border-left: 3px solid var(--accent-primary);">
+              <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Server Status</h2>
+                <span id="serverStatusBadge" style="padding: 4px 12px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; background: var(--bg-tertiary); color: var(--text-secondary);">Checking...</span>
+              </div>
+              <div class="card-body">
+                <div class="stats-row">
+                  <div class="stat-card">
+                    <div class="stat-content">
+                      <span class="stat-value" id="dashPlayerCount">-</span>
+                      <span class="stat-label">Players Online</span>
+                    </div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-content">
+                      <span class="stat-value" id="dashHighestCount">-</span>
+                      <span class="stat-label">Peak Players</span>
+                    </div>
+                  </div>
+                  <div class="stat-card">
+                    <div class="stat-content">
+                      <span class="stat-value" id="dashLastUpdated">-</span>
+                      <span class="stat-label">Last Updated</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Player Count Chart -->
+            <div class="card">
+              <div class="card-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Player Count Over Time</h2>
+                <div style="display: flex; gap: 4px;">
+                  <button class="btn btn-sm" onclick="loadDashboardChart(24)" id="chartBtn24h" style="font-size: 0.75rem;">24h</button>
+                  <button class="btn btn-sm" onclick="loadDashboardChart(168)" id="chartBtn7d" style="font-size: 0.75rem;">7d</button>
+                  <button class="btn btn-sm" onclick="loadDashboardChart(720)" id="chartBtn30d" style="font-size: 0.75rem;">30d</button>
+                </div>
+              </div>
+              <div class="card-body" style="padding: 12px;">
+                <canvas id="playerCountChart" style="width: 100%; max-height: 300px;"></canvas>
+              </div>
+            </div>
+
+            <!-- Tracker Stats -->
+            <div class="stats-row">
+              <div class="stat-card">
+                <div class="stat-content">
+                  <span class="stat-value" id="totalResources">-</span>
+                  <span class="stat-label">Total Resources</span>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-content">
+                  <span class="stat-value" id="activeResources">-</span>
+                  <span class="stat-label">Active Resources</span>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-content">
+                  <span class="stat-value" id="totalSchematics">-</span>
+                  <span class="stat-label">Schematics</span>
+                </div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-content">
+                  <span class="stat-value" id="lastPoll">-</span>
+                  <span class="stat-label">Last Poll</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Recent Resources -->
+            <div class="card">
+              <div class="card-header">
+                <h2>Recent Active Resources</h2>
+                <button class="btn btn-sm" onclick="loadRecentResources()">Refresh</button>
+              </div>
+              <div class="card-body">
+                <div class="table-container">
+                  <table class="data-table" id="recentResourcesTable">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Class</th>
+                        <th>OQ</th>
+                        <th>CD</th>
+                        <th>DR</th>
+                        <th>HR</th>
+                        <th>MA</th>
+                        <th>PE</th>
+                        <th>SR</th>
+                        <th>UT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr><td colspan="10" class="loading">Loading...</td></tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Resource Classes -->
+            <div class="card">
+              <div class="card-header">
+                <h2>Resources by Class</h2>
+              </div>
+              <div class="card-body">
+                <div class="class-grid" id="resourceClassGrid">
+                  <div class="loading">Loading...</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Resources View -->
+        <section id="resourcesView" class="view">
+          <div class="view-header">
+            <h2>Resources</h2>
+            <div class="view-controls">
+              <div class="search-box">
+                <input type="text" id="resourceSearch" placeholder="Search resources..." />
+                <button class="btn btn-primary" onclick="searchResources()">Search</button>
+              </div>
+              <div class="filter-group">
+                <label>
+                  <input type="checkbox" id="activeOnlyFilter" checked />
+                  Active only
+                </label>
+              </div>
+              <button class="btn btn-sm" onclick="toggleAdvancedFilters()">
+                ⚙️ Advanced
+              </button>
+            </div>
+          </div>
+
+          <!-- Advanced Filters -->
+          <div id="advancedFilters" class="card advanced-filters hidden" style="margin-bottom: 20px;">
+            <div class="card-header">
+              <h2>Advanced Stat Filters</h2>
+              <button class="btn btn-sm" onclick="clearAdvancedFilters()">Clear All</button>
+            </div>
+            <div class="card-body">
+              <p style="margin-bottom: 12px; color: var(--text-secondary); font-size: 0.85rem;">
+                Filter resources by stat values. Use operators: <code>&gt;</code>, <code>&gt;=</code>, <code>&lt;</code>, <code>&lt;=</code>, <code>=</code>
+              </p>
+              <div class="stat-filters-grid">
+                <div class="stat-filter-item">
+                  <label>OQ</label>
+                  <select class="stat-operator" data-stat="OQ">
+                    <option value="">--</option>
+                    <option value=">">&gt;</option>
+                    <option value=">=">&gt;=</option>
+                    <option value="<">&lt;</option>
+                    <option value="<=">&lt;=</option>
+                    <option value="=">=</option>
+                  </select>
+                  <input type="number" class="stat-value" data-stat="OQ" placeholder="0-1000" min="0" max="1000">
+                </div>
+                <div class="stat-filter-item">
+                  <label>CD</label>
+                  <select class="stat-operator" data-stat="CD">
+                    <option value="">--</option>
+                    <option value=">">&gt;</option>
+                    <option value=">=">&gt;=</option>
+                    <option value="<">&lt;</option>
+                    <option value="<=">&lt;=</option>
+                    <option value="=">=</option>
+                  </select>
+                  <input type="number" class="stat-value" data-stat="CD" placeholder="0-1000" min="0" max="1000">
+                </div>
+                <div class="stat-filter-item">
+                  <label>DR</label>
+                  <select class="stat-operator" data-stat="DR">
+                    <option value="">--</option>
+                    <option value=">">&gt;</option>
+                    <option value=">=">&gt;=</option>
+                    <option value="<">&lt;</option>
+                    <option value="<=">&lt;=</option>
+                    <option value="=">=</option>
+                  </select>
+                  <input type="number" class="stat-value" data-stat="DR" placeholder="0-1000" min="0" max="1000">
+                </div>
+                <div class="stat-filter-item">
+                  <label>FL</label>
+                  <select class="stat-operator" data-stat="FL">
+                    <option value="">--</option>
+                    <option value=">">&gt;</option>
+                    <option value=">=">&gt;=</option>
+                    <option value="<">&lt;</option>
+                    <option value="<=">&lt;=</option>
+                    <option value="=">=</option>
+                  </select>
+                  <input type="number" class="stat-value" data-stat="FL" placeholder="0-1000" min="0" max="1000">
+                </div>
+                <div class="stat-filter-item">
+                  <label>HR</label>
+                  <select class="stat-operator" data-stat="HR">
+                    <option value="">--</option>
+                    <option value=">">&gt;</option>
+                    <option value=">=">&gt;=</option>
+                    <option value="<">&lt;</option>
+                    <option value="<=">&lt;=</option>
+                    <option value="=">=</option>
+                  </select>
+                  <input type="number" class="stat-value" data-stat="HR" placeholder="0-1000" min="0" max="1000">
+                </div>
+                <div class="stat-filter-item">
+                  <label>MA</label>
+                  <select class="stat-operator" data-stat="MA">
+                    <option value="">--</option>
+                    <option value=">">&gt;</option>
+                    <option value=">=">&gt;=</option>
+                    <option value="<">&lt;</option>
+                    <option value="<=">&lt;=</option>
+                    <option value="=">=</option>
+                  </select>
+                  <input type="number" class="stat-value" data-stat="MA" placeholder="0-1000" min="0" max="1000">
+                </div>
+                <div class="stat-filter-item">
+                  <label>PE</label>
+                  <select class="stat-operator" data-stat="PE">
+                    <option value="">--</option>
+                    <option value=">">&gt;</option>
+                    <option value=">=">&gt;=</option>
+                    <option value="<">&lt;</option>
+                    <option value="<=">&lt;=</option>
+                    <option value="=">=</option>
+                  </select>
+                  <input type="number" class="stat-value" data-stat="PE" placeholder="0-1000" min="0" max="1000">
+                </div>
+                <div class="stat-filter-item">
+                  <label>SR</label>
+                  <select class="stat-operator" data-stat="SR">
+                    <option value="">--</option>
+                    <option value=">">&gt;</option>
+                    <option value=">=">&gt;=</option>
+                    <option value="<">&lt;</option>
+                    <option value="<=">&lt;=</option>
+                    <option value="=">=</option>
+                  </select>
+                  <input type="number" class="stat-value" data-stat="SR" placeholder="0-1000" min="0" max="1000">
+                </div>
+                <div class="stat-filter-item">
+                  <label>UT</label>
+                  <select class="stat-operator" data-stat="UT">
+                    <option value="">--</option>
+                    <option value=">">&gt;</option>
+                    <option value=">=">&gt;=</option>
+                    <option value="<">&lt;</option>
+                    <option value="<=">&lt;=</option>
+                    <option value="=">=</option>
+                  </select>
+                  <input type="number" class="stat-value" data-stat="UT" placeholder="0-1000" min="0" max="1000">
+                </div>
+              </div>
+              <div style="margin-top: 16px; display: flex; gap: 8px;">
+                <button class="btn btn-primary" onclick="applyAdvancedFilters()">Apply Filters</button>
+                <span id="activeFiltersCount" class="stat-label" style="align-self: center;"></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h2>Resources</h2>
+              <span id="resourceResultCount" class="stat-label"></span>
+            </div>
+            <div class="card-body">
+              <div class="table-container">
+                <table class="data-table" id="resourcesTable">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Class</th>
+                      <th>OQ</th>
+                      <th>CD</th>
+                      <th>DR</th>
+                      <th>FL</th>
+                      <th>HR</th>
+                      <th>MA</th>
+                      <th>PE</th>
+                      <th>SR</th>
+                      <th>UT</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td colspan="12" class="loading">Search for resources...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div id="resourcePagination" class="pagination" style="margin-top: 16px; display: none;">
+                <button class="btn btn-sm" id="resourcePrevBtn" onclick="changeResourcePage(-1)">← Previous</button>
+                <span id="resourcePageInfo" style="margin: 0 16px;"></span>
+                <button class="btn btn-sm" id="resourceNextBtn" onclick="changeResourcePage(1)">Next →</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Schematics View -->
+        <section id="schematicsView" class="view">
+          <div class="view-header">
+            <h2>Schematics</h2>
+            <div class="view-controls">
+              <div class="search-box">
+                <input type="text" id="schematicSearch" placeholder="Search schematics..." />
+                <button class="btn btn-primary" onclick="searchSchematics()">Search</button>
+              </div>
+              <select id="categoryFilter" onchange="filterSchematicsByCategory()">
+                <option value="">All Categories</option>
+              </select>
+            </div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+            <span id="schematicResultCount" class="stat-label"></span>
+            <div id="schematicPagination" class="pagination" style="display: none;">
+              <button class="btn btn-sm" id="schematicPrevBtn" onclick="changeSchematicPage(-1)">← Previous</button>
+              <span id="schematicPageInfo" style="margin: 0 16px;"></span>
+              <button class="btn btn-sm" id="schematicNextBtn" onclick="changeSchematicPage(1)">Next →</button>
+            </div>
+          </div>
+          <div class="schematics-grid" id="schematicsGrid">
+            <div class="loading">Loading schematics...</div>
+          </div>
+          <div id="schematicPaginationBottom" class="pagination" style="margin-top: 16px; display: none; justify-content: center;">
+            <button class="btn btn-sm" onclick="changeSchematicPage(-1)">← Previous</button>
+            <span id="schematicPageInfoBottom" style="margin: 0 16px;"></span>
+            <button class="btn btn-sm" onclick="changeSchematicPage(1)">Next →</button>
+          </div>
+        </section>
+
+        <!-- Items View -->
+        <section id="itemsView" class="view">
+          <div class="view-header">
+            <h2>🗡️ Item Lookup</h2>
+            <div class="view-controls">
+              <div class="search-box">
+                <input type="text" id="itemSearch" placeholder="Search items..." />
+                <button class="btn btn-primary" onclick="searchItemsUI()">Search</button>
+              </div>
+              <select id="itemTypeFilter" onchange="filterItemsByType()">
+                <option value="">All Types</option>
+                <option value="WEAPON">Weapon</option>
+                <option value="ARMOR">Armor</option>
+                <option value="ITEM">Item</option>
+                <option value="STORYTELLER">Storyteller</option>
+                <option value="OBJECT">Object</option>
+              </select>
+              <select id="itemSortBy" onchange="sortItemsUI()">
+                <option value="name">Name</option>
+                <option value="string_name">Display Name</option>
+                <option value="template_name">Template</option>
+                <option value="item_type">Type</option>
+                <option value="tier">Tier</option>
+                <option value="required_level">Required Level</option>
+                <option value="value">Value</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Item Stats Summary -->
+          <div class="stats-row" id="itemStatsRow" style="margin-bottom: 20px;">
+            <div class="stat-card">
+              <div class="stat-icon">📊</div>
+              <div class="stat-content">
+                <span class="stat-value" id="totalItems">-</span>
+                <span class="stat-label">Total Items</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">⚔️</div>
+              <div class="stat-content">
+                <span class="stat-value" id="weaponCount">-</span>
+                <span class="stat-label">Weapons</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🛡️</div>
+              <div class="stat-content">
+                <span class="stat-value" id="armorCount">-</span>
+                <span class="stat-label">Armor</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">📦</div>
+              <div class="stat-content">
+                <span class="stat-value" id="itemCount">-</span>
+                <span class="stat-label">Items (3)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quick Links -->
+          <div class="card" style="margin-bottom: 20px;">
+            <div class="card-header">
+              <h2>Quick Views</h2>
+            </div>
+            <div class="card-body">
+              <div class="action-buttons">
+                <button class="btn" onclick="loadAllItems()">📋 All Items</button>
+                <button class="btn" onclick="loadItemsByType('WEAPON')">⚔️ Weapons</button>
+                <button class="btn" onclick="loadItemsByType('ARMOR')">🛡️ Armor</button>
+                <button class="btn" onclick="loadItemsByType('ITEM')">📦 Items</button>
+                <button class="btn" onclick="loadItemsByType('STORYTELLER')">Storyteller</button>
+                <button class="btn" onclick="loadItemsByType('OBJECT')">Objects</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Items Table -->
+          <div class="card">
+            <div class="card-header">
+              <h2>Items</h2>
+              <span id="itemResultCount" class="stat-label"></span>
+            </div>
+            <div class="card-body">
+              <div class="table-container">
+                <table class="data-table" id="itemsTable">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>Template</th>
+                      <th>Category</th>
+                      <th>Type</th>
+                      <th>Tier</th>
+                      <th>Req. Level</th>
+                      <th>Value</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr><td colspan="8" class="loading">Search for items or select a quick view...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div id="itemPagination" class="pagination" style="margin-top: 16px; display: none;">
+                <button class="btn btn-sm" id="itemPrevBtn" onclick="loadItemsPage(-1)">← Previous</button>
+                <span id="itemPageInfo" style="margin: 0 16px;"></span>
+                <button class="btn btn-sm" id="itemNextBtn" onclick="loadItemsPage(1)">Next →</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Quests View -->
+        <section id="questsView" class="view">
+          <div class="view-header">
+            <h2>Quest Journal</h2>
+            <div class="view-controls">
+              <input type="text" id="questSearch" placeholder="Search quests..." class="search-input" />
+              <select id="questLevelFilter">
+                <option value="">All Levels</option>
+                <option value="1-10">1-10</option>
+                <option value="11-20">11-20</option>
+                <option value="21-30">21-30</option>
+                <option value="31-40">31-40</option>
+                <option value="41-50">41-50</option>
+                <option value="51-60">51-60</option>
+                <option value="61-70">61-70</option>
+                <option value="71-80">71-80</option>
+                <option value="81-90">81-90</option>
+              </select>
+              <select id="questTypeFilter">
+                <option value="">All Types</option>
+              </select>
+              <button class="btn btn-primary" onclick="loadQuests()">Search</button>
+            </div>
+          </div>
+
+          <!-- Quest Stats -->
+          <div class="stats-row" style="margin-bottom: 16px;">
+            <div class="stat-card">
+              <div class="stat-icon">📜</div>
+              <div class="stat-content">
+                <span class="stat-value" id="totalQuestsCount">-</span>
+                <span class="stat-label">Total Quests</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">🎯</div>
+              <div class="stat-content">
+                <span class="stat-value" id="questTypesCount">-</span>
+                <span class="stat-label">Quest Types</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon">📂</div>
+              <div class="stat-content">
+                <span class="stat-value" id="questCategoriesCount">-</span>
+                <span class="stat-label">Categories</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quest List -->
+          <div class="card">
+            <div class="card-header">
+              <h2>Quest Database</h2>
+              <span id="questResultCount" style="color: var(--text-secondary);"></span>
+            </div>
+            <div class="card-body">
+              <div class="table-container">
+                <table class="data-table" id="questTable">
+                  <thead>
+                    <tr>
+                      <th>Level</th>
+                      <th>Quest Name</th>
+                      <th>Type</th>
+                      <th>Category</th>
+                      <th>Rewards</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="questTableBody">
+                    <tr><td colspan="6" class="loading">Loading quests...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+              <div id="questPagination" class="pagination" style="margin-top: 16px; display: none;">
+                <button class="btn btn-sm" id="questPrevBtn" onclick="loadQuestsPage(-1)">← Previous</button>
+                <span id="questPageInfo" style="margin: 0 16px;"></span>
+                <button class="btn btn-sm" id="questNextBtn" onclick="loadQuestsPage(1)">Next →</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Cartographer / Waypoint Map View -->
+        <section id="terrainView" class="view">
+          <div class="view-header">
+            <h2>Titan Cartographer</h2>
+            <div class="view-controls" style="display: flex; align-items: center; gap: 12px;">
+              <select id="mapPlanetSelect"></select>
+              <button class="btn btn-primary" onclick="addWaypointPrompt()">+ Add Waypoint</button>
+              <label id="showPlayersToggle" class="map-player-toggle admin-only hidden">
+                <input type="checkbox" id="mapShowPlayersCheckbox" onchange="toggleMapPlayers(this.checked)">
+                <span class="map-player-toggle-label">Show Players</span>
+              </label>
+            </div>
+          </div>
+
+          <div style="display: flex; gap: 16px; height: calc(100vh - 180px); min-height: 600px;">
+            <!-- Map Container -->
+            <div style="flex: 1; min-width: 0;">
+              <div id="mapContainer" style="width: 100%; height: 100%; background: #0a0a1a; border-radius: 8px; overflow: hidden; position: relative; cursor: crosshair; display: flex; align-items: center; justify-content: center;">
+                <canvas id="mapCanvas" style="display: block;"></canvas>
+                <!-- Coordinate tooltip follows cursor -->
+                <div id="mapCoordTooltip" style="display: none; position: absolute; pointer-events: none; background: rgba(0,0,0,0.85); color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem; font-family: var(--font-mono); white-space: nowrap; z-index: 10;"></div>
+                <!-- Zoom controls -->
+                <div class="map-zoom-controls">
+                  <button class="map-zoom-btn" onclick="mapZoomIn()" title="Zoom In">+</button>
+                  <div class="map-zoom-level" id="mapZoomLevel">1x</div>
+                  <button class="map-zoom-btn" onclick="mapZoomOut()" title="Zoom Out">&minus;</button>
+                  <button class="map-zoom-btn" onclick="mapZoomReset()" title="Reset Zoom" style="font-size: 0.8rem; margin-top: 4px;">&#8634;</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Waypoint Sidebar -->
+            <div style="width: 320px; flex-shrink: 0; display: flex; flex-direction: column; gap: 12px;">
+              <!-- Planet Info Card -->
+              <div class="card" style="flex-shrink: 0;">
+                <div class="card-header" style="padding: 12px 16px;">
+                  <h2 style="font-size: 1rem;">Planet Info</h2>
+                </div>
+                <div class="card-body" style="padding: 12px 16px;">
+                  <div id="mapPlanetInfo" style="color: var(--text-secondary); font-size: 0.85rem;">Select a planet</div>
+                </div>
+              </div>
+
+              <!-- Player List Card (admin only, shown when "Show Players" checked) -->
+              <div id="mapPlayerCard" class="card" style="flex-shrink: 0; display: none;">
+                <div class="card-header" style="padding: 10px 16px; display: flex; justify-content: space-between; align-items: center;">
+                  <h2 style="font-size: 1rem; color: #00e5ff;">Players</h2>
+                  <span id="mapPlayerCount" style="color: var(--text-secondary); font-size: 0.8rem;">0</span>
+                </div>
+                <div class="card-body" style="padding: 0; max-height: 340px; overflow-y: auto;">
+                  <div id="mapPlayerList" style="padding: 4px 0;">
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; padding: 8px 16px;">No players</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Waypoint List Card -->
+              <div class="card" style="flex: 1; min-height: 0; display: flex; flex-direction: column;">
+                <div class="card-header" style="padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;">
+                  <h2 style="font-size: 1rem;">Waypoints</h2>
+                  <span id="waypointCount" style="color: var(--text-secondary); font-size: 0.8rem;">0</span>
+                </div>
+                <div style="padding: 4px 8px;">
+                  <input type="text" id="waypointSearchInput" placeholder="Search waypoints..."
+                    style="width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary); font-size: 0.82rem; font-family: var(--font-body); outline: none;"
+                    oninput="onWaypointSearchInput(this.value)">
+                </div>
+                <div class="card-body" style="padding: 0; flex: 1; overflow-y: auto;">
+                  <div id="waypointList" style="padding: 8px;">
+                    <p style="color: var(--text-secondary); font-size: 0.85rem; padding: 8px;">No waypoints</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Player Lookup View -->
+        <section id="playerLookupView" class="view">
+          <div class="view-header">
+            <h2>Player Lookup</h2>
+          </div>
+          <div style="padding: 16px;">
+            <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+              <input type="text" id="playerSearchInput" placeholder="Search by character name..."
+                style="flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); font-size: 0.9rem; font-family: var(--font-body);"
+                onkeydown="if(event.key==='Enter') searchPlayers()">
+              <button class="btn btn-primary" onclick="searchPlayers()">Search</button>
+            </div>
+            <div id="playerSearchResults">
+              <p style="color: var(--text-secondary); text-align: center; padding: 40px;">Enter a character name to search</p>
+            </div>
+          </div>
+
+          <!-- Player Detail Modal -->
+          <div id="playerDetailModal" class="modal" style="display: none;">
+            <div class="modal-backdrop" onclick="closePlayerModal()"></div>
+            <div class="modal-content" style="max-width: 850px; max-height: 85vh; overflow-y: auto;">
+              <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h2 id="playerDetailName">Player Details</h2>
+                <button class="btn btn-sm" onclick="closePlayerModal()" style="font-size: 1.2rem; padding: 4px 8px;">&times;</button>
+              </div>
+              <div class="modal-body" id="playerDetailBody">
+                <div class="loading">Loading...</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Admin Character Actions Modal -->
+          <div id="adminCharModal" class="modal" style="display: none;">
+            <div class="modal-backdrop" onclick="closeAdminCharModal()"></div>
+            <div class="modal-content" style="max-width: 600px; max-height: 85vh; overflow-y: auto;">
+              <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
+                <h2>Admin: <span id="adminCharModalName">Character</span></h2>
+                <button class="btn btn-sm" onclick="closeAdminCharModal()" style="font-size: 1.2rem; padding: 4px 8px;">&times;</button>
+              </div>
+              <div class="modal-body" id="adminCharModalBody">
+                <div class="loading">Loading...</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- City Lookup View -->
+        <section id="cityLookupView" class="view">
+          <div class="view-header">
+            <h2>City Lookup</h2>
+          </div>
+          <div style="padding: 16px;">
+            <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+              <input type="text" id="citySearchInput" placeholder="Filter cities..."
+                style="flex: 1; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-secondary); color: var(--text-primary); font-size: 0.9rem; font-family: var(--font-body);"
+                oninput="filterCityTable(this.value)">
+              <button class="btn btn-primary" onclick="loadCities()">Refresh</button>
+            </div>
+            <div id="cityResults">
+              <p style="color: var(--text-secondary); text-align: center; padding: 40px;">Loading cities...</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Admin View -->
+        <section id="adminView" class="view admin-only">
+          <div class="view-header">
+            <h2>Admin Panel</h2>
+            <span class="admin-badge">Admin Level: <span id="adminLevelBadge">-</span></span>
+          </div>
+
+          <div class="admin-layout">
+            <!-- ============ ROW 1: System Overview (full-width stats bar) ============ -->
+            <div class="admin-section admin-section--full">
+              <div class="admin-section-header">
+                <h3>System Overview</h3>
+                <button class="btn btn-sm" onclick="loadAdminStats()">Refresh</button>
+              </div>
+              <div class="admin-stat-bar" id="adminStats">
+                <div class="loading">Loading...</div>
+              </div>
+            </div>
+
+            <!-- ============ ROW 2: Main grid ============ -->
+            <div class="admin-grid-main">
+
+              <!-- LEFT COLUMN: Actions & Sync -->
+              <div class="admin-column">
+
+                <!-- Polling & Sync -->
+                <div class="admin-card">
+                  <div class="admin-card-header">
+                    <h3>Polling & Sync</h3>
+                  </div>
+                  <div class="admin-card-body">
+                    <div class="admin-btn-grid">
+                      <button class="btn" onclick="adminPollResources()">Poll Resources</button>
+                      <button class="btn" onclick="adminPollSchematics()">Sync Schematics</button>
+                      <button class="btn" onclick="adminSyncItems()">Sync Items</button>
+                      <button class="btn" onclick="adminLoadItemStats()">Reload Item Stats</button>
+                      <button class="btn" onclick="adminPollStatus()">Poll Server Status</button>
+                      <button class="btn" onclick="adminReloadQuests()">Reload Quests</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Cartographer -->
+                <div class="admin-card">
+                  <div class="admin-card-header">
+                    <h3>Cartographer</h3>
+                  </div>
+                  <div class="admin-card-body">
+                    <div id="waypointAdminStats" class="admin-mini-stats">
+                      Loading waypoint stats...
+                    </div>
+                    <div class="admin-btn-grid" style="margin-top: 12px;">
+                      <button class="btn" onclick="adminImportWaypoints()">Import from Oracle</button>
+                      <button class="btn" id="toggleWaypointCreationBtn" onclick="adminToggleWaypointCreation()">Toggle Creation</button>
+                      <button class="btn btn-warning" onclick="adminClearWaypoints()">Clear Local WPs</button>
+                    </div>
+                    <div id="waypointCreationStatus" class="admin-status-line"></div>
+                  </div>
+                </div>
+
+                <!-- Item Visibility -->
+                <div class="admin-card">
+                  <div class="admin-card-header">
+                    <h3>Item Visibility</h3>
+                  </div>
+                  <div class="admin-card-body">
+                    <p class="admin-hint">Hide/show items by category or type</p>
+                    <div class="admin-form-row">
+                      <select id="itemVisibilityCategory" class="admin-select">
+                        <option value="">Select category...</option>
+                      </select>
+                      <select id="itemVisibilityType" class="admin-select">
+                        <option value="">All Types</option>
+                        <option value="WEAPON">Weapon</option>
+                        <option value="ARMOR">Armor</option>
+                        <option value="ITEM">Item</option>
+                        <option value="STORYTELLER">Storyteller</option>
+                        <option value="OBJECT">Object</option>
+                      </select>
+                    </div>
+                    <div class="admin-btn-row">
+                      <button class="btn btn-warning" onclick="hideItemsFiltered()">Hide Items</button>
+                      <button class="btn" onclick="showItemsFiltered()">Show Items</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Column Settings -->
+                <div class="admin-card">
+                  <div class="admin-card-header">
+                    <h3>Column Settings</h3>
+                    <button class="btn btn-sm" onclick="loadColumnSettings()">Refresh</button>
+                  </div>
+                  <div class="admin-card-body">
+                    <div id="columnSettingsContainer" class="admin-scroll-box">
+                      <div class="loading">Loading columns...</div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              <!-- CENTER COLUMN: Data Management -->
+              <div class="admin-column">
+
+                <!-- Configuration -->
+                <div class="admin-card">
+                  <div class="admin-card-header">
+                    <h3>Configuration</h3>
+                  </div>
+                  <div class="admin-card-body">
+                    <div id="configDisplay" class="config-display">
+                      <div class="loading">Loading...</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Resource Tree -->
+                <div class="admin-card">
+                  <div class="admin-card-header">
+                    <h3>Resource Tree</h3>
+                    <button class="btn btn-sm" onclick="loadResourceTreeStats()">Refresh</button>
+                  </div>
+                  <div class="admin-card-body">
+                    <div id="resourceTreeStats" class="admin-stats">
+                      <div class="loading">Loading...</div>
+                    </div>
+                    <div class="admin-btn-row" style="margin-top: 12px;">
+                      <button class="btn" onclick="adminReloadResourceTree()">Reload Tree</button>
+                      <button class="btn" onclick="adminSyncResourceTreeDb()">Sync to DB</button>
+                    </div>
+                    <div class="admin-inline-form" style="margin-top: 12px;">
+                      <input type="text" id="testResourceClass" placeholder="e.g., milk_domesticated_corellia" class="admin-input">
+                      <button class="btn btn-sm" onclick="testResourceClassInfo()">Test</button>
+                    </div>
+                    <div id="resourceClassTestResult" style="margin-top: 12px; display: none;" class="config-display"></div>
+                  </div>
+                </div>
+
+                <!-- Template Names -->
+                <div class="admin-card">
+                  <div class="admin-card-header">
+                    <h3>Template Names</h3>
+                    <button class="btn btn-sm" onclick="loadTemplateNameStats()">Refresh</button>
+                  </div>
+                  <div class="admin-card-body">
+                    <div id="templateNameStats" class="admin-stats">
+                      <div class="loading">Loading...</div>
+                    </div>
+                    <div class="admin-btn-row" style="margin-top: 12px;">
+                      <button class="btn" onclick="adminCacheTemplateNames()">Cache All Names</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- STF Testing -->
+                <div class="admin-card">
+                  <div class="admin-card-header">
+                    <h3>STF String Tester</h3>
+                  </div>
+                  <div class="admin-card-body">
+                    <p class="admin-hint">Test STF string file resolution</p>
+                    <div class="admin-form-col">
+                      <div class="admin-inline-form">
+                        <input type="text" id="stfTestFile" placeholder="File (e.g. item_n)" value="item_n" class="admin-input">
+                        <input type="text" id="stfTestKey" placeholder="Key (e.g. armor_segment)" value="armor_segment" class="admin-input">
+                        <button class="btn btn-sm" onclick="adminTestStf()">Resolve</button>
+                      </div>
+                    </div>
+                    <div id="stfTestResult" style="margin-top: 12px; display: none;" class="config-display"></div>
+                  </div>
+                </div>
+
+                <!-- Objvar Key Mappings -->
+                <div class="admin-card">
+                  <div class="admin-card-header">
+                    <h3>Objvar Key Mappings</h3>
+                    <button class="btn btn-sm" onclick="loadObjvarMappings()">Refresh</button>
+                  </div>
+                  <div class="admin-card-body">
+                    <p class="admin-hint">Map raw object variable names to human-readable labels. These appear in player Object Information.</p>
+                    <div class="admin-form-col" style="margin-bottom: 12px;">
+                      <div class="admin-inline-form">
+                        <input type="text" id="objvarMapName" placeholder="Objvar name (e.g. crafting.station)" class="admin-input" style="flex: 2;">
+                        <input type="text" id="objvarMapLabel" placeholder="Display label" class="admin-input" style="flex: 2;">
+                        <input type="text" id="objvarMapCategory" placeholder="Category" class="admin-input" style="flex: 1;" value="General">
+                        <button class="btn btn-sm btn-primary" onclick="addObjvarMapping()">Add</button>
+                      </div>
+                    </div>
+                    <div id="objvarMappingsList" style="max-height: 280px; overflow-y: auto;">
+                      <div class="loading">Click Refresh to load</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- LOCATION_SCENE to Planet Mapping -->
+                <div class="admin-card">
+                  <div class="admin-card-header">
+                    <h3>LOCATION_SCENE → Planet</h3>
+                    <button class="btn btn-sm" onclick="loadLocationSceneMappings()">Refresh</button>
+                  </div>
+                  <div class="admin-card-body">
+                    <p class="admin-hint">Map WAYPOINTS.LOCATION_SCENE (integer) to planet key for waypoint sync. In-game waypoints use numeric scene IDs.</p>
+                    <div class="admin-form-col" style="margin-bottom: 12px;">
+                      <div class="admin-inline-form">
+                        <input type="number" id="locationSceneInput" placeholder="LOCATION_SCENE (e.g. 12345)" class="admin-input" style="flex: 1; min-width: 100px;">
+                        <select id="locationScenePlanetSelect" class="admin-select" style="flex: 1; min-width: 100px;">
+                          <option value="tatooine">Tatooine</option>
+                          <option value="naboo">Naboo</option>
+                          <option value="corellia">Corellia</option>
+                          <option value="rori">Rori</option>
+                          <option value="talus">Talus</option>
+                          <option value="yavin4">Yavin IV</option>
+                          <option value="endor">Endor</option>
+                          <option value="lok">Lok</option>
+                          <option value="dantooine">Dantooine</option>
+                          <option value="dathomir">Dathomir</option>
+                          <option value="kashyyyk">Kashyyyk</option>
+                          <option value="mustafar">Mustafar</option>
+                        </select>
+                        <button class="btn btn-sm btn-primary" onclick="addLocationSceneMapping()">Add</button>
+                      </div>
+                    </div>
+                    <div id="locationSceneMappingsList" style="max-height: 260px; overflow-y: auto;">
+                      <div class="loading">Click Refresh to load</div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+              <!-- RIGHT COLUMN: Maintenance & Danger -->
+              <div class="admin-column">
+
+                <!-- Maintenance -->
+                <div class="admin-card">
+                  <div class="admin-card-header">
+                    <h3>Maintenance</h3>
+                  </div>
+                  <div class="admin-card-body">
+                    <div class="admin-btn-grid">
+                      <button class="btn btn-warning" onclick="clearHistory()">Clear History & Logs</button>
+                      <button class="btn btn-warning" onclick="clearResources()">Clear All Resources</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Danger Zone -->
+                <div class="admin-card admin-card--danger">
+                  <div class="admin-card-header">
+                    <h3>Danger Zone</h3>
+                  </div>
+                  <div class="admin-card-body">
+                    <p class="danger-warning">These actions are irreversible!</p>
+                    <div class="admin-btn-row">
+                      <button class="btn btn-danger" onclick="confirmNukeDatabase()">Nuke Database</button>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Path Configuration -->
+                <div class="admin-card">
+                  <div class="admin-card-header">
+                    <h3>Path Configuration</h3>
+                    <button class="btn btn-sm" onclick="loadPathConfig()">Refresh</button>
+                  </div>
+                  <div class="admin-card-body">
+                    <div id="pathConfigDisplay" class="config-display">
+                      <div class="loading">Loading paths...</div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+            <!-- ============ ROW 3: Full-width tables ============ -->
+            <div class="admin-section admin-section--full">
+              <div class="admin-card">
+                <div class="admin-card-header">
+                  <h3>Error Tracking</h3>
+                  <div class="admin-header-actions">
+                    <span id="errorSummaryBadge" class="error-badge"></span>
+                    <select id="errorCategoryFilter" onchange="loadAdminErrors()" class="admin-select-sm">
+                      <option value="all">All Categories</option>
+                      <option value="schematic">Schematics</option>
+                      <option value="item">Items</option>
+                      <option value="resource">Resources</option>
+                      <option value="general">General</option>
+                    </select>
+                    <button class="btn btn-sm" onclick="loadAdminErrors()">Refresh</button>
+                    <button class="btn btn-sm btn-warning" onclick="clearAdminErrors()">Clear</button>
+                  </div>
+                </div>
+                <div class="admin-card-body" style="padding: 0;">
+                  <div class="table-container" style="max-height: 360px; overflow-y: auto;">
+                    <table class="data-table" id="adminErrorsTable">
+                      <thead>
+                        <tr>
+                          <th>Time</th>
+                          <th>Category</th>
+                          <th>File</th>
+                          <th>Error Message</th>
+                          <th>Details</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr><td colspan="5" class="loading">Loading errors...</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="admin-section admin-section--full">
+              <div class="admin-card">
+                <div class="admin-card-header">
+                  <h3>Recent Poll Logs</h3>
+                  <button class="btn btn-sm" onclick="loadAdminLogs()">Refresh</button>
+                </div>
+                <div class="admin-card-body" style="padding: 0;">
+                  <div class="table-container">
+                    <table class="data-table" id="adminLogsTable">
+                      <thead>
+                        <tr>
+                          <th>Type</th>
+                          <th>Status</th>
+                          <th>Processed</th>
+                          <th>New</th>
+                          <th>Updated</th>
+                          <th>Despawned</th>
+                          <th>Error</th>
+                          <th>Time</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr><td colspan="8" class="loading">Loading...</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Resource Detail Modal -->
+    <div class="modal" id="resourceModal">
+      <div class="modal-backdrop" onclick="closeModal('resourceModal')"></div>
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2 id="resourceModalTitle">Resource Details</h2>
+          <button class="modal-close" onclick="closeModal('resourceModal')">&times;</button>
+        </div>
+        <div class="modal-body" id="resourceModalBody">
+          <!-- Content loaded dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Schematic Detail Modal -->
+    <div class="modal" id="schematicModal">
+      <div class="modal-backdrop" onclick="closeModal('schematicModal')"></div>
+      <div class="modal-content modal-large">
+        <div class="modal-header">
+          <h2 id="schematicModalTitle">Schematic Details</h2>
+          <button class="modal-close" onclick="closeModal('schematicModal')">&times;</button>
+        </div>
+        <div class="modal-body" id="schematicModalBody">
+          <!-- Content loaded dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Item Detail Modal -->
+    <div class="modal" id="itemModal">
+      <div class="modal-backdrop" onclick="closeModal('itemModal')"></div>
+      <div class="modal-content modal-large">
+        <div class="modal-header">
+          <h2 id="itemModalTitle">Item Details</h2>
+          <button class="modal-close" onclick="closeModal('itemModal')">&times;</button>
+        </div>
+        <div class="modal-body" id="itemModalBody">
+          <!-- Content loaded dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Error Detail Modal -->
+    <div class="modal" id="errorModal">
+      <div class="modal-backdrop" onclick="closeModal('errorModal')"></div>
+      <div class="modal-content modal-large">
+        <div class="modal-header">
+          <h2 id="errorModalTitle">Error Details</h2>
+          <button class="modal-close" onclick="closeModal('errorModal')">&times;</button>
+        </div>
+        <div class="modal-body" id="errorModalBody">
+          <!-- Content loaded dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Quest Detail Modal -->
+    <div class="modal" id="questModal">
+      <div class="modal-backdrop" onclick="closeModal('questModal')"></div>
+      <div class="modal-content modal-large">
+        <div class="modal-header">
+          <h2 id="questModalTitle">Quest Details</h2>
+          <button class="modal-close" onclick="closeModal('questModal')">&times;</button>
+        </div>
+        <div class="modal-body" id="questModalBody">
+          <!-- Content loaded dynamically -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Waypoint Edit Modal -->
+    <div class="modal" id="waypointModal">
+      <div class="modal-backdrop" onclick="closeModal('waypointModal')"></div>
+      <div class="modal-content modal-small">
+        <div class="modal-header">
+          <h2 id="waypointModalTitle">Add Waypoint</h2>
+          <button class="modal-close" onclick="closeModal('waypointModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <input type="hidden" id="waypointEditId" />
+          <div class="form-group" style="margin-bottom: 12px;">
+            <label for="waypointEditName">Name</label>
+            <input type="text" id="waypointEditName" placeholder="Waypoint name" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);" />
+          </div>
+          <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 12px;">
+            <div class="form-group">
+              <label for="waypointEditX">X</label>
+              <input type="number" id="waypointEditX" step="any" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);" />
+            </div>
+            <div class="form-group">
+              <label for="waypointEditY">Y</label>
+              <input type="number" id="waypointEditY" step="any" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);" />
+            </div>
+            <div class="form-group">
+              <label for="waypointEditZ">Z</label>
+              <input type="number" id="waypointEditZ" step="any" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);" />
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom: 16px;">
+            <label for="waypointEditColor">Color</label>
+            <select id="waypointEditColor" style="width: 100%; padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); background: var(--bg-primary); color: var(--text-primary);">
+              <option value="0">Blue</option>
+              <option value="1">Green</option>
+              <option value="2">Orange</option>
+              <option value="3">Yellow</option>
+              <option value="4">Purple</option>
+              <option value="5">White</option>
+              <option value="6">Red</option>
+            </select>
+          </div>
+          <div class="modal-actions">
+            <button class="btn" onclick="closeModal('waypointModal')">Cancel</button>
+            <button class="btn btn-primary" id="waypointSaveBtn" onclick="saveWaypoint()">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirm Modal -->
+    <div class="modal" id="confirmModal">
+      <div class="modal-backdrop" onclick="closeModal('confirmModal')"></div>
+      <div class="modal-content modal-small">
+        <div class="modal-header">
+          <h2 id="confirmModalTitle">Confirm Action</h2>
+          <button class="modal-close" onclick="closeModal('confirmModal')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p id="confirmModalMessage"></p>
+          <div class="modal-actions">
+            <button class="btn" onclick="closeModal('confirmModal')">Cancel</button>
+            <button class="btn btn-danger" id="confirmModalAction">Confirm</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="swg-model-viewer.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
+

@@ -1,0 +1,42 @@
+{
+  "name": "chuba-titan-tracker",
+  "version": "1.1.0",
+  "description": "Full-featured SWG resource tracker, schematic datapad, armory, quest journal, and terrain viewer",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "migrate": "node src/database/migrate.js",
+    "seed": "node src/database/seed.js",
+    "test": "node --test src/**/*.test.js",
+    "test-parser": "node src/test-parser.js",
+    "sync-schematics": "node -e \"import('./src/services/schematic-service.js').then(m => console.log(m.syncSchematics()))\""
+  },
+  "keywords": [
+    "swg",
+    "resources",
+    "crafting",
+    "schematics"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "8.4.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0",
+    "lru-cache": "^11.0.0",
+    "node-cron": "^3.0.3",
+    "oracledb": "^6.6.0",
+    "pino": "^9.3.0",
+    "pino-pretty": "^11.2.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
