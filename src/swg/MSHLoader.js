@@ -137,7 +137,7 @@ class MSHLoader {
                 vertex.position = reader.readVector();
             }
             if (hasNormal) {
-                vertex.normal = reader. readVector();
+                vertex.normal = reader.readVector();
             }
             if (hasColor0) {
                 vertex.color0 = reader.readInt32(); // ARGB packed
@@ -149,7 +149,7 @@ class MSHLoader {
             vertex.uvs = [];
             for (let j = 0; j < numTexCoordSets; j++) {
                 if (texCoordDims[j] === 2) {
-                    vertex. uvs.push({
+                    vertex.uvs.push({
                         u: reader.readFloat(),
                         v: reader.readFloat()
                     });
@@ -157,7 +157,7 @@ class MSHLoader {
                     // For DOT3 or other special coordinates
                     vertex.uvs.push({
                         u: reader.readFloat(),
-                        v: reader. readFloat(),
+                        v: reader.readFloat(),
                         w: reader.readFloat(),
                         q: reader.readFloat()
                     });
@@ -167,7 +167,7 @@ class MSHLoader {
             vertices.push(vertex);
         }
 
-        reader. exitChunk(dataChunk);
+        reader.exitChunk(dataChunk);
         reader.exitForm();
         reader.exitForm();
 

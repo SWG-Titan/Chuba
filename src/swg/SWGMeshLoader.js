@@ -1,12 +1,18 @@
+/**
+ * Browser-only mesh loader: parses APT/MSH via IFFReader and builds Three.js objects.
+ * Chuba's production model viewer uses the API (model-service JSON) instead; this is for standalone use.
+ * Expects global THREE and (if in browser) APTLoader, MSHLoader, IFFReader in scope.
+ */
 class SWGMeshLoader {
     constructor() {
+        if (typeof THREE === 'undefined') throw new Error('SWGMeshLoader requires global THREE');
         this.textureLoader = new THREE.TextureLoader();
-        this. ddsLoader = new THREE.DDSLoader(); // You need DDSLoader from Three.js examples
+        this.ddsLoader = typeof THREE.DDSLoader !== 'undefined' ? new THREE.DDSLoader() : null;
     }
 
     async load(aptUrl, baseTexturePath = '') {
         // Step 1: Load APT to get MSH path
-        const mshPath = await APTLoader. load(aptUrl);
+        const mshPath = await APTLoader.load(aptUrl);
 
         // Step 2: Load MSH file
         const meshData = await MSHLoader.load(mshPath);
@@ -28,7 +34,7 @@ class SWGMeshLoader {
                 positions.push(-v.position.x, v.position.y, v.position.z); // Note the X flip
 
                 if (v.normal) {
-                    normals.push(-v.normal.x, v. normal.y, v.normal. z);
+                    normals.push(-v.normal.x, v.normal.y, v.normal.z);
                 }
 
                 if (v.uvs && v.uvs.length > 0) {
@@ -45,7 +51,7 @@ class SWGMeshLoader {
             }
 
             // Set indices
-            if (primitive.indices. length > 0) {
+            if (primitive.indices && primitive.indices.length > 0) {
                 geometry.setIndex(primitive.indices);
             }
 
@@ -66,19 +72,17 @@ class SWGMeshLoader {
     }
 
     resolveTexture(shaderTemplateName, basePath) {
-        // SWG shader template names often reference . dds files
-        // You'll need to parse the shader template or use a naming convention
-        // For now, simple heuristic:
-        const textureName = shaderTemplateName.replace('.sht', '. dds');
+        // SWG shader template names often reference .dds files
+        const textureName = (shaderTemplateName || '').replace(/\.sht$/i, '.dds');
         return basePath + textureName;
     }
 
     async loadTexture(path) {
         return new Promise((resolve, reject) => {
-            if (path.endsWith('.dds')) {
+            if (path.endsWith('.dds') && this.ddsLoader) {
                 this.ddsLoader.load(path, resolve, undefined, reject);
             } else {
-                this.textureLoader. load(path, resolve, undefined, reject);
+                this.textureLoader.load(path, resolve, undefined, reject);
             }
         });
     }

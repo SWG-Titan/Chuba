@@ -1,20 +1,14 @@
 /**
- * SWG Model Viewer
+ * Model Viewer (Three.js)
  *
- * Three.js-based 3D model viewer for SWG objects
- * Implements 1:1 rendering to match in-game appearance
- * 
- * Based on C++ implementations:
- *   - MeshAppearance.cpp
- *   - ShaderPrimitiveSet.cpp
- *   - StaticShader.cpp
- *   - Graphics.cpp
+ * Consumes model JSON from the API only (GET /api/models/template/* or /api/models/schematic/:id).
+ * Expects: { primitives: [{ positions, normals?, uvs?, colors?, indices?, primitiveType?, textureInfo?, shaderTemplate? }] }
+ * No dependency on SWG/Titan types; coordinate conversion (left-handed → right-handed) applied here.
+ *
+ * Aligned with Titan C++: MeshAppearanceTemplate, ShaderPrimitiveSet, Iff (sharedFile).
  */
 
-// SWG uses left-handed coordinate system with Y-up
-// Three.js uses right-handed coordinate system with Y-up
-// SWG: X=right, Y=up, Z=into screen (left-handed)
-// Three.js: X=right, Y=up, Z=out of screen (right-handed)
+// Left-handed (e.g. DirectX) → Right-handed (Three.js): negate Z
 
 class SWGModelViewer {
   constructor(container, options = {}) {
@@ -42,7 +36,14 @@ class SWGModelViewer {
     this.animationId = null;
     this.textureCache = new Map();
     this.textureLoader = null;
-    
+    /** Stored original UVs per primitive (for UV transform sliders) */
+    this._originalUvs = [];
+    /** UV transform: offset and flip (so you can find values to bake in) */
+    this.uvOffsetU = 0;
+    this.uvOffsetV = 0;
+    this.uvFlipU = false;
+    this.uvFlipV = false; // default V flip for DirectX→OpenGL
+
     // Lighting
     this.lights = [];
     this.ambientLight = null;
@@ -52,7 +53,10 @@ class SWGModelViewer {
   }
 
   init() {
-    // Check for Three.js
+    if (!this.container) {
+      console.error('[SWGModelViewer] No container element');
+      return;
+    }
     if (typeof THREE === 'undefined') {
       console.error('[SWGModelViewer] Three.js not loaded');
       return;
@@ -71,7 +75,7 @@ class SWGModelViewer {
       0.1,
       1000
     );
-    this.camera.position.set(0, 0.5, 2.5);
+    this.camera.position.set(0, 0.5, 3.5);
 
     // Renderer with proper gamma correction for SWG textures
     this.renderer = new THREE.WebGLRenderer({ 
@@ -80,13 +84,32 @@ class SWGModelViewer {
     });
     this.renderer.setSize(this.options.width, this.options.height);
     this.renderer.setPixelRatio(window.devicePixelRatio);
-    // SWG used DirectX which doesn't do gamma correction by default
-    // Keep linear output to match original look
-    this.renderer.outputEncoding = THREE.LinearEncoding;
+    // Linear output to match source data (r128: outputEncoding, r150+: outputColorSpace)
+    if (this.renderer.outputEncoding !== undefined) {
+      this.renderer.outputEncoding = THREE.LinearEncoding;
+    } else if (this.renderer.outputColorSpace !== undefined) {
+      this.renderer.outputColorSpace = (THREE.LinearSRGBColorSpace !== undefined)
+        ? THREE.LinearSRGBColorSpace
+        : THREE.SRGBColorSpace;
+    }
 
-    // Clear existing content (like loading text) before adding canvas
+    // Clear existing content; use a wrapper so canvas + UV controls both fit and stay visible
     this.container.innerHTML = '';
-    this.container.appendChild(this.renderer.domElement);
+    const wrapper = document.createElement('div');
+    wrapper.className = 'swg-model-viewer-wrapper';
+    wrapper.style.cssText = 'display:flex;flex-direction:column;height:100%;min-height:0;width:100%;';
+    const canvasWrap = document.createElement('div');
+    canvasWrap.style.cssText = 'flex:1 1 0;min-height:0;display:flex;align-items:center;justify-content:center;';
+    canvasWrap.appendChild(this.renderer.domElement);
+    wrapper.appendChild(canvasWrap);
+    const showUvControls = this.options.showUvControls !== false && this.options.height >= 200;
+    if (showUvControls) {
+      this.uvControlsEl = this.createUvControls();
+      wrapper.appendChild(this.uvControlsEl);
+    } else {
+      this.uvControlsEl = null;
+    }
+    this.container.appendChild(wrapper);
 
     // Setup lighting based on mode
     this.setupLighting(this.options.lightingMode);
@@ -111,6 +134,94 @@ class SWGModelViewer {
 
     console.log('[SWGModelViewer] Scene initialized');
     this.animate();
+  }
+
+  /**
+   * Create UV offset/transform controls and value display (so you can see what to bake in)
+   */
+  createUvControls() {
+    const wrap = document.createElement('div');
+    wrap.className = 'swg-model-viewer-uv-controls';
+    wrap.style.cssText = 'flex:0 0 auto;min-height:0;margin:0;padding:8px;background:#2a2a3e;border:1px solid #4a4a6a;border-radius:6px;font-size:0.8rem;font-family:sans-serif;color:#e0e0e0;overflow:visible;';
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:auto 1fr auto;gap:6px 12px;align-items:center;';
+    const label = (t) => { const e = document.createElement('label'); e.textContent = t; e.style.gridColumn = '1'; return e; };
+    const valueSpan = (id) => { const e = document.createElement('span'); e.id = id; e.style.fontFamily = 'var(--font-mono, monospace)'; e.textContent = '0'; return e; };
+    const makeSlider = (id, min, max, step, value, onChange) => {
+      const s = document.createElement('input');
+      s.type = 'range';
+      s.id = id;
+      s.min = String(min);
+      s.max = String(max);
+      s.step = String(step);
+      s.value = String(value);
+      s.style.width = '100%';
+      s.style.gridColumn = '2';
+      s.addEventListener('input', () => { onChange(Number(s.value)); });
+      return s;
+    };
+    const makeCheck = (id, checked, onChange) => {
+      const c = document.createElement('input');
+      c.type = 'checkbox';
+      c.id = id;
+      c.checked = !!checked;
+      c.style.gridColumn = '2';
+      c.addEventListener('change', () => { onChange(c.checked); });
+      return c;
+    };
+    const row = (els) => { const r = document.createElement('div'); r.style.cssText = 'display:contents'; els.forEach(e => grid.appendChild(e)); };
+    const uValEl = valueSpan('swg-viewer-uv-offset-u-value');
+    const vValEl = valueSpan('swg-viewer-uv-offset-v-value');
+    grid.appendChild(label('U offset'));
+    grid.appendChild(makeSlider('swg-viewer-uv-offset-u', -1, 1, 0.01, this.uvOffsetU, (v) => { this.uvOffsetU = v; uValEl.textContent = v.toFixed(3); this.applyUvTransform(); }));
+    grid.appendChild(uValEl);
+    grid.appendChild(label('V offset'));
+    grid.appendChild(makeSlider('swg-viewer-uv-offset-v', -1, 1, 0.01, this.uvOffsetV, (v) => { this.uvOffsetV = v; vValEl.textContent = v.toFixed(3); this.applyUvTransform(); }));
+    grid.appendChild(vValEl);
+    grid.appendChild(label('Flip U'));
+    grid.appendChild(makeCheck('swg-viewer-uv-flip-u', this.uvFlipU, (v) => { this.uvFlipU = v; this.applyUvTransform(); }));
+    grid.appendChild(document.createElement('span'));
+    grid.appendChild(label('Flip V'));
+    grid.appendChild(makeCheck('swg-viewer-uv-flip-v', this.uvFlipV, (v) => { this.uvFlipV = v; this.applyUvTransform(); }));
+    grid.appendChild(document.createElement('span'));
+    const copyRow = document.createElement('div');
+    copyRow.style.cssText = 'grid-column:1/-1;margin-top:6px;font-size:0.75rem;color:#999;';
+    copyRow.textContent = 'Values (use in code): offsetU=' + this.uvOffsetU.toFixed(3) + ', offsetV=' + this.uvOffsetV.toFixed(3) + ', flipU=' + this.uvFlipU + ', flipV=' + this.uvFlipV;
+    const updateCopy = () => { copyRow.textContent = 'Values (use in code): offsetU=' + this.uvOffsetU.toFixed(3) + ', offsetV=' + this.uvOffsetV.toFixed(3) + ', flipU=' + this.uvFlipU + ', flipV=' + this.uvFlipV; };
+    wrap.appendChild(grid);
+    wrap.appendChild(copyRow);
+    this._uvCopyRow = copyRow;
+    this._uvUpdateCopy = updateCopy;
+    uValEl.textContent = this.uvOffsetU.toFixed(3);
+    vValEl.textContent = this.uvOffsetV.toFixed(3);
+    updateCopy();
+    return wrap;
+  }
+
+  /**
+   * Apply current UV offset/flip to all meshes (from stored original UVs)
+   */
+  applyUvTransform() {
+    if (!this.model || !this._originalUvs.length) return;
+    const children = this.model.children;
+    for (let idx = 0; idx < children.length; idx++) {
+      const obj = children[idx];
+      if (!obj.isMesh || !obj.geometry?.attributes?.uv) continue;
+      const src = this._originalUvs[idx];
+      if (!src || src.length < 2) continue;
+      const arr = new Float32Array(src.length);
+      for (let i = 0; i < src.length; i += 2) {
+        let u = src[i];
+        let v = src[i + 1];
+        if (this.uvFlipU) u = 1 - u;
+        if (this.uvFlipV) v = 1 - v;
+        arr[i] = u + this.uvOffsetU;
+        arr[i + 1] = v + this.uvOffsetV;
+      }
+      obj.geometry.setAttribute('uv', new THREE.BufferAttribute(arr, 2));
+      obj.geometry.attributes.uv.needsUpdate = true;
+    }
+    if (this._uvUpdateCopy) this._uvUpdateCopy();
   }
 
   /**
@@ -252,8 +363,8 @@ class SWGModelViewer {
         THREE.UnsignedByteType
       );
 
-      // Flip Y for DirectX->OpenGL coordinate system conversion
-      texture.flipY = true;
+      // UVs are already flipped in loadModel (V' = 1 - V), so don't flip texture
+      texture.flipY = false;
       texture.wrapS = THREE.RepeatWrapping;
       texture.wrapT = THREE.RepeatWrapping;
       texture.magFilter = THREE.LinearFilter;
@@ -349,35 +460,31 @@ class SWGModelViewer {
    * Implements 1:1 rendering matching SWG's MeshAppearance
    * @param {Object} modelData - Model data with primitives array
    */
+  /**
+   * Load model from API response only. Expects { primitives: Array }.
+   * Each primitive: positions (required), normals?, uvs?, colors?, indices?, primitiveType?, textureInfo?, shaderTemplate?
+   */
   async loadModel(modelData) {
     console.log('[SWGModelViewer] Loading model', modelData);
 
-    // Remove existing model
     if (this.model) {
       this.scene.remove(this.model);
       this.model = null;
     }
 
-    if (!modelData || !modelData.primitives || modelData.primitives.length === 0) {
+    const primitives = modelData?.primitives;
+    if (!Array.isArray(primitives) || primitives.length === 0) {
       console.warn('[SWGModelViewer] No primitives in model data');
       this.showPlaceholder();
       return;
     }
 
+    this._originalUvs = [];
     const group = new THREE.Group();
 
-    for (const primitive of modelData.primitives) {
-      console.log('[SWGModelViewer] Processing primitive', {
-        shaderTemplate: primitive.shaderTemplate,
-        vertexCount: primitive.vertexCount,
-        indexCount: primitive.indexCount,
-        hasPositions: primitive.positions?.length > 0,
-        hasNormals: primitive.normals?.length > 0,
-        hasUVs: primitive.uvs?.length > 0,
-        textureInfo: primitive.textureInfo
-      });
-
-      if (!primitive.positions || primitive.positions.length === 0) {
+    for (const primitive of primitives) {
+      const positions = primitive.positions;
+      if (!positions || positions.length === 0) {
         console.warn('[SWGModelViewer] Primitive has no positions');
         continue;
       }
@@ -388,16 +495,15 @@ class SWGModelViewer {
       // SWG: X=right, Y=up, Z=into screen (left-handed DirectX style)
       // Three.js: X=right, Y=up, Z=out of screen (right-handed OpenGL style)
       // 
-      // To convert: negate Z axis
-      // This maintains Y-up orientation while flipping handedness
-      const srcPositions = primitive.positions;
-      const positions = new Float32Array(srcPositions.length);
+      // Negate Z for left-handed → right-handed
+      const srcPositions = positions;
+      const positionArray = new Float32Array(srcPositions.length);
       for (let i = 0; i < srcPositions.length; i += 3) {
-        positions[i] = srcPositions[i];       // X stays X
-        positions[i + 1] = srcPositions[i + 1]; // Y stays Y (already Y-up)
-        positions[i + 2] = -srcPositions[i + 2]; // Negate Z for handedness
+        positionArray[i] = srcPositions[i];       // X stays X
+        positionArray[i + 1] = srcPositions[i + 1]; // Y stays Y (already Y-up)
+        positionArray[i + 2] = -srcPositions[i + 2]; // Negate Z for handedness
       }
-      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute('position', new THREE.BufferAttribute(positionArray, 3));
 
       // Convert normals similarly - negate Z
       if (primitive.normals && primitive.normals.length > 0) {
@@ -413,10 +519,22 @@ class SWGModelViewer {
         geometry.computeVertexNormals();
       }
 
-      // Set UVs if available
-      if (primitive.uvs && primitive.uvs.length > 0) {
-        const uvs = new Float32Array(primitive.uvs);
-        geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+      // Set UVs if available (using current offset/flip so sliders match)
+      if (primitive.uvs && primitive.uvs.length >= 2) {
+        const src = primitive.uvs;
+        this._originalUvs.push(Array.from(src));
+        const uvArray = new Float32Array(src.length);
+        for (let i = 0; i < src.length; i += 2) {
+          let u = src[i];
+          let v = src[i + 1];
+          if (this.uvFlipU) u = 1 - u;
+          if (this.uvFlipV) v = 1 - v;
+          uvArray[i] = u + this.uvOffsetU;
+          uvArray[i + 1] = v + this.uvOffsetV;
+        }
+        geometry.setAttribute('uv', new THREE.BufferAttribute(uvArray, 2));
+      } else {
+        this._originalUvs.push(null);
       }
 
       // Set vertex colors if available
@@ -512,10 +630,20 @@ class SWGModelViewer {
     group.scale.setScalar(scale);
     group.position.sub(center.multiplyScalar(scale));
 
-    // Add bounding box helper if option enabled
+    // Add bounding box helper if option enabled (Box3Helper in r150+, BoxHelper in r128)
     if (this.options.showBoundingBox) {
-      const boxHelper = new THREE.BoxHelper(group, 0x00ff00);
-      this.scene.add(boxHelper);
+      try {
+        if (typeof THREE.Box3Helper !== 'undefined') {
+          const box = new THREE.Box3().setFromObject(group);
+          const boxHelper = new THREE.Box3Helper(box, 0x00ff00);
+          this.scene.add(boxHelper);
+        } else {
+          const boxHelper = new THREE.BoxHelper(group, 0x00ff00);
+          this.scene.add(boxHelper);
+        }
+      } catch (e) {
+        console.warn('[SWGModelViewer] Box helper not available', e);
+      }
     }
 
     this.model = group;
@@ -631,6 +759,7 @@ class SWGModelViewer {
    */
   async loadSchematicModel(schematicId) {
     console.log('[SWGModelViewer] Loading model for schematic:', schematicId);
+    this.clearModel();
 
     try {
       const response = await fetch(`/api/models/schematic/${schematicId}`);
@@ -684,22 +813,38 @@ class SWGModelViewer {
   }
 
   /**
-   * Dispose of resources
+   * Clear current model from scene (keeps viewer usable for next load)
+   */
+  clearModel() {
+    if (this.model && this.scene) {
+      this.scene.remove(this.model);
+      this.model = null;
+    }
+    this._originalUvs = [];
+  }
+
+  /**
+   * Dispose of resources and remove viewer from container
    */
   dispose() {
     console.log('[SWGModelViewer] Disposing viewer');
 
     if (this.animationId) {
       cancelAnimationFrame(this.animationId);
+      this.animationId = null;
     }
 
-    if (this.model) {
-      this.scene.remove(this.model);
-    }
+    this.clearModel();
 
     if (this.renderer) {
       this.renderer.dispose();
-      this.container.removeChild(this.renderer.domElement);
+      if (this.renderer.domElement && this.renderer.domElement.parentNode) {
+        this.renderer.domElement.parentNode.removeChild(this.renderer.domElement);
+      }
+    }
+
+    if (this.container && this.container.firstChild) {
+      this.container.removeChild(this.container.firstChild);
     }
   }
 }

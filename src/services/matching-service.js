@@ -1,12 +1,46 @@
 import { LRUCache } from 'lru-cache';
 import { getLocalDb } from '../database/local-db.js';
-import { getSchematicById } from './schematic-service.js';
+import { getSchematicById, getCachedTemplateName, resolveIffDisplayName } from './schematic-service.js';
 import { getResourcesByClass, getResourceById } from './resource-service.js';
 import { calculateWeightedScore } from '../utils/resource-helpers.js';
 import { createLogger } from '../utils/logger.js';
 import { getResourceStringName, getResourceIcon, getAllMatchingResourceClasses, getResourceClass } from './resource-tree-service.js';
+import { isTemplateIngredient } from '../parsers/tpf-parser.js';
 
 const logger = createLogger('matching-service');
+
+/**
+ * Get display name and icon for a slot's resource_class (template path or resource class).
+ * Template paths (IFF) are resolved via shared TPF + STF; resource classes use resource tree.
+ */
+function getSlotDisplayNameAndIcon(slot) {
+  const resourceClass = slot.resource_class;
+  if (!resourceClass) return { displayName: '', icon: 'default.png', isTemplateSlot: false, templatePath: null };
+
+  const ingredientType = slot.ingredient_type || 'IT_resourceClass';
+  const isTemplate = isTemplateIngredient(ingredientType);
+  const looksLikeIffPath = typeof resourceClass === 'string' &&
+    resourceClass.includes('object/') && (resourceClass.endsWith('.iff') || resourceClass.includes('.iff'));
+
+  if (isTemplate || looksLikeIffPath) {
+    const cached = getCachedTemplateName(resourceClass);
+    const displayName = cached?.display_name || resolveIffDisplayName(resourceClass) ||
+      (() => {
+        const lastSlash = resourceClass.lastIndexOf('/');
+        let name = lastSlash >= 0 ? resourceClass.substring(lastSlash + 1) : resourceClass;
+        if (name.endsWith('.iff')) name = name.slice(0, -4);
+        return name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+      })();
+    return { displayName: displayName || resourceClass, icon: 'default.png', isTemplateSlot: true, templatePath: resourceClass };
+  }
+
+  return {
+    displayName: getResourceStringName(resourceClass),
+    icon: getResourceIcon(resourceClass),
+    isTemplateSlot: false,
+    templatePath: null,
+  };
+}
 
 /**
  * LRU Cache for match results
@@ -176,13 +210,16 @@ export function getBestResourcesForSchematic(schematicId, options = {}) {
     // Check cache
     if (useCache && matchCache.has(cacheKey)) {
       const cached = matchCache.get(cacheKey);
+      const { displayName: resourceClassName, icon: resourceClassIcon, isTemplateSlot, templatePath } = getSlotDisplayNameAndIcon(slot);
       results.slots.push({
         slotIndex: slot.slot_index,
         slotName: slot.slot_name,
         resourceClass: slot.resource_class,
-        resourceClassName: getResourceStringName(slot.resource_class),
-        resourceClassIcon: getResourceIcon(slot.resource_class),
+        resourceClassName,
+        resourceClassIcon,
         quantity: slot.quantity,
+        isTemplateSlot,
+        templatePath,
         ...cached,
       });
       continue;
@@ -197,14 +234,17 @@ export function getBestResourcesForSchematic(schematicId, options = {}) {
       historicalMatch = findBestMatchForSlot(slot, slot.weights || {}, false);
     }
 
+    const { displayName: resourceClassName, icon: resourceClassIcon, isTemplateSlot, templatePath } = getSlotDisplayNameAndIcon(slot);
     const slotResult = {
       slotIndex: slot.slot_index,
       slotName: slot.slot_name,
       resourceClass: slot.resource_class,
-      resourceClassName: getResourceStringName(slot.resource_class),
-      resourceClassIcon: getResourceIcon(slot.resource_class),
+      resourceClassName,
+      resourceClassIcon,
       quantity: slot.quantity,
       weights: slot.weights,
+      isTemplateSlot,
+      templatePath,
       bestActive: {
         resourceId: activeMatch.resourceId,
         resourceName: activeMatch.resource?.resource_name || null,

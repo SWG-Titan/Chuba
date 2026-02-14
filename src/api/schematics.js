@@ -184,27 +184,26 @@ router.get('/:id', (req, res) => {
           const resourceClass = slot.resource_class;
           const ingredientType = slot.ingredient_type || 'IT_resourceClass';
           const isTemplate = isTemplateIngredient(ingredientType);
+          // Treat as template path if it looks like an IFF path (e.g. object/tangible/.../foo.iff)
+          const looksLikeIffPath = resourceClass && typeof resourceClass === 'string' &&
+            (resourceClass.includes('object/') && (resourceClass.endsWith('.iff') || resourceClass.includes('.iff')));
 
-          // For template ingredients, resourceClass is actually a template path
-          // For resource ingredients, get the string name
+          // For template ingredients (or IFF-looking path), resourceClass is a template path → resolve via shared TPF + STF
+          // For resource ingredients, get the string name from resource tree
           let displayName = resourceClass;
           let icon = 'default.png';
           let templatePath = null;
 
-          if (isTemplate && resourceClass) {
-            // It's a template ingredient - the resourceClass is the template path
+          if ((isTemplate || looksLikeIffPath) && resourceClass) {
             templatePath = resourceClass;
-            // Try to get the display name from template cache
             const cached = getCachedTemplateName(resourceClass);
             if (cached?.display_name) {
               displayName = cached.display_name;
             } else {
-              // Try live resolution from shared/server TPF files
               const resolved = resolveIffDisplayName(resourceClass);
               if (resolved) {
                 displayName = resolved;
               } else {
-                // Last resort fallback: extract filename from path
                 const lastSlash = resourceClass.lastIndexOf('/');
                 displayName = lastSlash >= 0 ? resourceClass.substring(lastSlash + 1) : resourceClass;
                 if (displayName.endsWith('.iff')) {
@@ -213,9 +212,8 @@ router.get('/:id', (req, res) => {
                 displayName = displayName.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
               }
             }
-            icon = 'default.png'; // Template ingredients use default icon
+            icon = 'default.png';
           } else if (resourceClass) {
-            // It's a resource ingredient
             displayName = getResourceStringName(resourceClass);
             icon = getResourceIcon(resourceClass);
           }

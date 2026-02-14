@@ -6,21 +6,28 @@ import {
   buildInventoryTree,
   getPlayerObjvars,
   getPlayersByPlanet,
+  getCharactersByStationId,
   renameCharacter,
   moveCharacter,
   changeCharacterRace,
   lockAccount,
 } from '../services/player-service.js';
+import { getStationId } from '../services/auth-service.js';
 import { getSession, SESSION_COOKIE_NAME } from '../services/session-service.js';
 import { createLogger } from '../utils/logger.js';
 
 const logger = createLogger('players-api');
 const router = express.Router();
 
+/** Helper to get any valid session */
+function getReqSession(req) {
+  const sessionId = req.cookies?.[SESSION_COOKIE_NAME];
+  return getSession(sessionId) || null;
+}
+
 /** Helper to check admin from session */
 function getAdminSession(req) {
-  const sessionId = req.cookies?.[SESSION_COOKIE_NAME];
-  const session = getSession(sessionId);
+  const session = getReqSession(req);
   return session?.isAdmin ? session : null;
 }
 
@@ -37,6 +44,29 @@ router.get('/search', async (req, res) => {
     const players = await searchPlayers(query);
     res.json({ success: true, count: players.length, data: players });
   } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * GET /api/players/my-characters
+ * List current user's characters by station_id (from swgtitan.org station-parse). Requires login.
+ */
+router.get('/my-characters', async (req, res) => {
+  const session = getReqSession(req);
+  if (!session) {
+    return res.status(401).json({ success: false, error: 'Login required' });
+  }
+
+  try {
+    const stationId = await getStationId(session.username);
+    if (stationId == null) {
+      return res.status(404).json({ success: false, error: 'Station ID not found for user' });
+    }
+    const characters = await getCharactersByStationId(stationId);
+    res.json({ success: true, count: characters.length, data: characters });
+  } catch (error) {
+    logger.error({ error: error.message, username: session?.username }, 'My characters failed');
     res.status(500).json({ success: false, error: error.message });
   }
 });

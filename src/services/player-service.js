@@ -63,6 +63,55 @@ export async function searchPlayers(query) {
 }
 
 /**
+ * Get all characters for an account by STATION_ID (from PLAYERS table).
+ * Per ORACLE_STRUCT: PLAYERS has CHARACTER_OBJECT, STATION_ID; join OBJECTS for name, location, etc.
+ * @param {string|number} stationId - Account station ID
+ * @returns {Promise<Array>} Same shape as search results
+ */
+export async function getCharactersByStationId(stationId) {
+  const sql = `
+    SELECT
+      p.CHARACTER_OBJECT,
+      p.STATION_ID,
+      o.OBJECT_NAME,
+      o.X,
+      o.Y,
+      o.Z,
+      o.SCENE_ID,
+      o.CASH_BALANCE,
+      o.BANK_BALANCE,
+      o.OBJECT_TEMPLATE_ID
+    FROM PLAYERS p
+    JOIN OBJECTS o ON p.CHARACTER_OBJECT = o.OBJECT_ID
+    WHERE p.STATION_ID = :stationId
+      AND (o.DELETED = 0 OR o.DELETED IS NULL)
+    ORDER BY o.OBJECT_NAME
+  `;
+
+  try {
+    const result = await executeOracleQuery(sql, { stationId });
+    const rows = result.rows || [];
+    logger.info({ stationId, count: rows.length }, 'Fetched characters by station');
+
+    return rows.map(row => ({
+      characterObjectId: String(row.CHARACTER_OBJECT),
+      stationId: String(row.STATION_ID ?? ''),
+      name: row.OBJECT_NAME || 'Unknown',
+      planet: row.SCENE_ID || 'unknown',
+      x: row.X || 0,
+      y: row.Y || 0,
+      z: row.Z || 0,
+      cash: row.CASH_BALANCE || 0,
+      bank: row.BANK_BALANCE || 0,
+      templateId: row.OBJECT_TEMPLATE_ID,
+    }));
+  } catch (error) {
+    logger.error({ error: error.message, stationId }, 'Failed to get characters by station');
+    throw error;
+  }
+}
+
+/**
  * Get full player details
  * @param {string|number} characterObjectId
  * @returns {Object|null}

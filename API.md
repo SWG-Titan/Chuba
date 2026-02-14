@@ -35,6 +35,9 @@ Destroy session and clear cookie.
 ### GET `/api/auth/session`
 Get current session info.
 
+### GET `/api/auth/check-admin`
+Check if current session has admin privileges.
+
 ---
 
 ## Health
@@ -156,6 +159,143 @@ Get item by template path.
 ### GET `/api/items/:id`
 Get a single item by ID with full stats.
 
+### POST `/api/items/sync`
+Sync master items from disk (Admin only).
+
+### POST `/api/items/load-stats`
+Reload item stats from disk.
+
+### POST `/api/items/hide`
+Hide/show item categories (Admin). Body: `{ category, hidden }`.
+
+### GET `/api/items/columns`
+Get column visibility settings.
+
+### PUT `/api/items/columns/:columnName`
+Update a single column visibility setting.
+
+### PUT `/api/items/columns`
+Bulk update column visibility. Body: `{ columns: [{ columnName, visible, displayName?, sortOrder? }] }`.
+
+### GET `/api/items/by-template/*`
+Get item by template path.
+
+---
+
+## Players
+
+### GET `/api/players/search`
+Search players by character name.
+
+**Query Parameters:**
+- `q` - Search term (min 2 characters)
+
+**Response:** `{ success, count, data: [{ characterObjectId, stationId, name, planet, x, y, z, cash, bank, templateId }] }`
+
+### GET `/api/players/by-planet`
+Get all players on a specific planet (Admin only). Used for Cartographer player overlay.
+
+**Query Parameters:**
+- `planet` - Planet key (e.g. `tatooine`)
+
+**Response:** `{ success, count, data: [{ characterObjectId, name, x, y, z }] }`
+
+### GET `/api/players/:id`
+Get player details by character object ID.
+
+**Response:** `{ success, data: { characterObjectId, stationId, name, planet, x, y, z, cash, bank, templateId } }`
+
+### GET `/api/players/:id/inventory`
+Get recursive inventory tree for a player.
+
+**Response:** `{ success, totalItems, data: tree }`
+
+### GET `/api/players/:id/objvars`
+Get object variables for the player character (Admin only).
+
+**Response:** `{ success, count, data: [{ name, type, value }] }`
+
+### POST `/api/players/:id/rename`
+Rename a character (Admin only). Body: `{ newName }`.
+
+### POST `/api/players/:id/move`
+Move a character to a new location (Admin only). Body: `{ planet, x, y, z }`.
+
+### POST `/api/players/:id/race`
+Change character race/template (Admin only). Body: `{ templateId }`.
+
+### POST `/api/players/:id/lock`
+Lock or unlock the account for this character (Admin only). Body: `{ locked: boolean, stationId }`.
+
+---
+
+## Cities
+
+### GET `/api/cities`
+Get all cities (from Oracle via CITY_OBJECTS + OBJECT_VARIABLES_VIEW).
+
+**Response:** `{ success, data: [{ cityId, name, mayorId, mayorName, planet, x, y, z, radius, incomeTax, ... }] }`
+
+### GET `/api/cities/:id`
+Get a single city by ID.
+
+---
+
+## Waypoints
+
+Waypoints are stored locally (SQLite). In-game waypoints are synced from Oracle using LOCATION_SCENE → planet mappings (Admin).
+
+### GET `/api/waypoints/planets`
+Get list of available planets with map info (name, displayName, mapSize).
+
+### GET `/api/waypoints/stats`
+Get waypoint statistics (total, byPlanet, bySource).
+
+### GET `/api/waypoints/settings/creation`
+Check if waypoint creation from the map is enabled.
+
+### POST `/api/waypoints/settings/creation`
+Toggle waypoint creation. Body: `{ enabled: boolean }`.
+
+### POST `/api/waypoints/sync`
+Trigger Oracle waypoint sync (Admin). Populates local DB from WAYPOINTS using LOCATION_SCENE→planet mappings.
+
+### POST `/api/waypoints/clear`
+Clear waypoints (Admin). Body: `{ includeOracle?: boolean }` — if true, clears all; otherwise only local.
+
+### GET `/api/waypoints`
+Get waypoints, optionally filtered by planet.
+
+**Query Parameters:**
+- `planet` - Filter by planet key (e.g. `tatooine`)
+
+**Response:** `{ success, count, data: [{ waypoint_id, object_id, name, planet, x, y, z, color, active, source }] }`
+
+### GET `/api/waypoints/:id`
+Get a single waypoint by ID.
+
+### POST `/api/waypoints`
+Create a new local waypoint. Body: `{ name, planet, x, y, z, color? }`.
+
+### PUT `/api/waypoints/:id`
+Update a local waypoint. Body: `{ name?, x?, y?, z?, color?, planet? }`. Server (Oracle) waypoints are read-only.
+
+### DELETE `/api/waypoints/:id`
+Delete a local waypoint. Server waypoints cannot be deleted.
+
+---
+
+## Status
+
+### GET `/api/status/current`
+Get current server status (player count, etc.).
+
+### GET `/api/status/history`
+Get server status history for charts.
+
+### POST `/api/status/poll`
+Trigger a manual status poll (fetch and store current status).
+
 ---
 
 ## Models (3D)
@@ -172,6 +312,8 @@ Get 3D model for a schematic's crafted object.
 ---
 
 ## Terrain
+
+*Note: Cartographer map planet list and waypoint data are provided by **Waypoints** (`/api/waypoints/planets`, `/api/waypoints`).*
 
 ### GET `/api/terrain/planets`
 Get list of available planets.
@@ -249,8 +391,11 @@ Get tracked errors.
 ### GET `/api/admin/errors/summary`
 Get error summary by category.
 
+### DELETE `/api/admin/errors`
+Clear tracked errors.
+
 ### GET `/api/admin/test-stf`
-Test STF file parsing.
+Test STF file parsing. Query: `?file=...&key=...`.
 
 ### GET `/api/admin/resource-tree/stats`
 Get resource tree statistics.
@@ -291,6 +436,31 @@ Sync resource classes to database.
 ### POST `/api/admin/template-names/cache-all`
 Cache all template names.
 
+### GET `/api/admin/objvar-mappings`
+Get all objvar key → display label mappings (for player Object Information).
+
+**Response:** `{ success, count, data: [{ id, objvar_name, display_label, category }] }`
+
+### POST `/api/admin/objvar-mappings`
+Add or update an objvar mapping. Body: `{ objvarName, displayLabel, category? }`.
+
+### DELETE `/api/admin/objvar-mappings/:id`
+Delete an objvar key mapping.
+
+### POST `/api/admin/objvar-mappings/bulk`
+Bulk import objvar mappings. Body: `{ mappings: [{ objvarName, displayLabel, category? }, ...] }`.
+
+### GET `/api/admin/location-scene-mappings`
+Get all LOCATION_SCENE (int) → planet mappings (for waypoint sync from Oracle).
+
+**Response:** `{ success, count, data: [{ id, location_scene, planet }], planets: [...] }`
+
+### POST `/api/admin/location-scene-mappings`
+Add or update a LOCATION_SCENE → planet mapping. Body: `{ locationScene: number, planet: string }`.
+
+### DELETE `/api/admin/location-scene-mappings/:idOrScene`
+Delete a mapping by row id or by location_scene value.
+
 ---
 
 ## Response Format
@@ -317,9 +487,10 @@ All endpoints return JSON with the following structure:
 
 ---
 
-## Authentication
+## Notes
 
-Most endpoints require authentication via session cookie. Admin endpoints require `adminLevel >= 50`.
-
-Session cookie name: `chuba_session`
+- Most endpoints require authentication via session cookie.
+- Admin endpoints require `adminLevel >= 50` (session `isAdmin`).
+- Session cookie name: `chuba_session`.
+- Cartographer (map) uses **Waypoints** (`/api/waypoints/planets`, `/api/waypoints?planet=...`) and optionally **Players** (`/api/players/by-planet`) for the player overlay.
 

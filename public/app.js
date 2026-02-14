@@ -212,6 +212,12 @@ function initNavigation() {
     });
   });
 
+  // Profile (username) button
+  const profileBtn = document.getElementById('currentUser');
+  if (profileBtn && profileBtn.dataset.view) {
+    profileBtn.addEventListener('click', () => switchView(profileBtn.dataset.view));
+  }
+
   // Lookup dropdown toggle
   const dropdownBtn = document.getElementById('lookupDropdownBtn');
   const dropdownMenu = document.getElementById('lookupDropdownMenu');
@@ -256,6 +262,8 @@ function switchView(view) {
       btn.classList.toggle('active', btn.dataset.view === view);
     }
   });
+  const profileNavBtn = document.getElementById('currentUser');
+  if (profileNavBtn) profileNavBtn.classList.toggle('active', view === 'profile');
 
   // Update views
   document.querySelectorAll('.view').forEach(v => {
@@ -290,6 +298,9 @@ function switchView(view) {
       break;
     case 'cityLookup':
       loadCities();
+      break;
+    case 'profile':
+      loadProfileView();
       break;
   }
 }
@@ -1435,6 +1446,19 @@ async function adminClearWaypoints() {
   }
 }
 
+async function adminPruneDuplicateWaypoints() {
+  showToast('Pruning duplicate waypoints...', 'info');
+  try {
+    const result = await apiPost('/admin/waypoints/prune-duplicates', {});
+    const data = result.data || {};
+    showToast(result.message || `Pruned ${data.deleted || 0} duplicate(s) in ${data.groupsPruned || 0} location(s)`, 'success');
+    loadWaypointAdminStats();
+    if (mapCurrentPlanet) loadMapWaypoints(mapCurrentPlanet);
+  } catch (error) {
+    showToast('Failed to prune waypoints: ' + error.message, 'error');
+  }
+}
+
 async function adminToggleWaypointCreation() {
   try {
     // Get current state and flip it
@@ -1840,6 +1864,16 @@ async function openSchematicModal(schematicId) {
   const title = document.getElementById('schematicModalTitle');
   const body = document.getElementById('schematicModalBody');
 
+  // Clear previous schematic's model viewer so we don't show stale model
+  if (window.currentSchematicViewer) {
+    try {
+      window.currentSchematicViewer.dispose();
+    } catch (e) {
+      console.warn('[Schematic Modal] Dispose previous viewer:', e);
+    }
+    window.currentSchematicViewer = null;
+  }
+
   title.textContent = 'Loading...';
   body.innerHTML = '<div class="loading"><span class="spinner"></span> Loading schematic details...</div>';
   modal.classList.add('open');
@@ -1861,10 +1895,6 @@ async function openSchematicModal(schematicId) {
       const viewerContainer = document.getElementById('schematicModelViewer');
       if (viewerContainer) {
         console.log('[Schematic Modal] Initializing 3D model viewer');
-        // Dispose of any existing viewer
-        if (window.currentSchematicViewer) {
-          window.currentSchematicViewer.dispose();
-        }
         window.currentSchematicViewer = new SWGModelViewer(viewerContainer, {
           width: 320,
           height: 320,
@@ -1890,8 +1920,8 @@ function renderSchematicDetail(schematic, bestResources) {
       <div class="schematic-detail-header">
         <div class="schematic-info-column">
           ${schematic.description ? `
-          <div style="margin-bottom: 16px; padding: 12px; background: var(--bg-primary); border-radius: 8px; border-left: 3px solid var(--accent-primary);">
-            <p style="color: var(--text-secondary); margin: 0; font-style: italic;">${escapeHtml(schematic.description)}</p>
+          <div class="schematic-description">
+            <p>${escapeHtml(schematic.description)}</p>
           </div>
           ` : ''}
           <div class="resource-info">
@@ -1924,10 +1954,12 @@ function renderSchematicDetail(schematic, bestResources) {
         </div>
       </div>
       
-      <h3 style="margin-top: 20px; margin-bottom: 12px;">Ingredient Slots</h3>
-      <div class="schematic-slots">
-        ${slots.map(slot => renderSlotCard(slot)).join('')}
-      </div>
+      <section class="schematic-slots-section" aria-label="Ingredient slots">
+        <h3 class="schematic-slots-title">Ingredient Slots</h3>
+        <div class="schematic-slots">
+          ${slots.map(slot => renderSlotCard(slot)).join('')}
+        </div>
+      </section>
     </div>
   `;
 }
@@ -1944,13 +1976,14 @@ function renderSlotCard(slot) {
   // Generate unique ID for this slot's model viewer
   const slotViewerId = `slot-model-${slot.index || slot.slotIndex || Math.random().toString(36).substr(2, 9)}`;
 
+  const hasBest = !!(slot.bestActive || slot.bestHistorical);
   return `
-    <div class="slot-card">
-      <div class="slot-header">
-        <div class="slot-name">${escapeHtml(slot.slotName || slot.name || 'Slot ' + (slot.slotIndex + 1))}</div>
-        <div class="slot-quantity">×${slot.quantity || 1}</div>
-      </div>
-      <div class="slot-resource-class">
+    <article class="slot-card ${hasBest ? 'slot-card-has-best' : ''}">
+      <div class="slot-card-main">
+        <header class="slot-header">
+          <span class="slot-name">${escapeHtml(slot.slotName || slot.name || 'Slot ' + (slot.slotIndex + 1))}</span>
+          <span class="slot-quantity">×${slot.quantity || 1}</span>
+        </header>
         ${isTemplateSlot && templatePath ? `
           <div class="slot-ingredient-model">
             <div id="${slotViewerId}" class="slot-model-viewer" data-template="${escapeHtml(templatePath)}">
@@ -1958,49 +1991,41 @@ function renderSlotCard(slot) {
             </div>
           </div>
         ` : ''}
-        <span class="resource-class-cell">
-          <img src="/images/${escapeHtml(resourceClassIcon)}" alt="" class="resource-icon" onerror="this.src='/images/default.png'">
-          <strong title="${escapeHtml(resourceClass)}">${escapeHtml(resourceClassName)}</strong>
-        </span>
-        ${isTemplateSlot ? '<span class="slot-type-badge">Component</span>' : ''}
-      </div>
-      
-      ${weightEntries.length > 0 ? `
-        <div class="slot-weights">
-          ${weightEntries.map(([stat, weight]) => `
-            <span class="weight-tag">${stat}: ${(weight * 100).toFixed(0)}%</span>
-          `).join('')}
+        <div class="slot-resource-class">
+          <span class="resource-class-cell">
+            <img src="/images/${escapeHtml(resourceClassIcon)}" alt="" class="resource-icon" onerror="this.src='/images/default.png'">
+            <strong title="${escapeHtml(resourceClass)}">${escapeHtml(resourceClassName)}</strong>
+          </span>
+          ${isTemplateSlot ? '<span class="slot-type-badge">Component</span>' : ''}
         </div>
-      ` : ''}
-      
+        ${weightEntries.length > 0 ? `
+          <div class="slot-weights">
+            ${weightEntries.map(([stat, weight]) => `
+              <span class="weight-tag">${stat}: ${(weight * 100).toFixed(0)}%</span>
+            `).join('')}
+          </div>
+        ` : ''}
+      </div>
       ${slot.bestActive || slot.bestHistorical ? `
-        <div class="slot-best-resources">
+        <aside class="slot-best-resources">
+          <span class="slot-best-heading">Best fit</span>
           ${slot.bestActive?.resourceId ? `
             <div class="best-resource">
-              <div>
-                <div class="best-resource-label">Best Active</div>
-                <span class="best-resource-name" onclick="closeModal('schematicModal'); openResourceModal('${slot.bestActive.resourceId}')">
-                  ${escapeHtml(slot.bestActive.resourceName || slot.bestActive.resourceId)}
-                </span>
-              </div>
+              <span class="best-resource-label">Active</span>
+              <span class="best-resource-name" onclick="closeModal('schematicModal'); openResourceModal('${slot.bestActive.resourceId}')">${escapeHtml(slot.bestActive.resourceName || slot.bestActive.resourceId)}</span>
               <span class="best-resource-score">${slot.bestActive.score}</span>
             </div>
           ` : '<div class="best-resource"><span class="best-resource-inactive">No active resources</span></div>'}
-          
           ${slot.bestHistorical?.resourceId && slot.bestHistorical.resourceId !== slot.bestActive?.resourceId ? `
             <div class="best-resource">
-              <div>
-                <div class="best-resource-label">Best Historical ${!slot.bestHistorical.isActive ? '(Inactive)' : ''}</div>
-                <span class="best-resource-name ${!slot.bestHistorical.isActive ? 'best-resource-inactive' : ''}" onclick="closeModal('schematicModal'); openResourceModal('${slot.bestHistorical.resourceId}')">
-                  ${escapeHtml(slot.bestHistorical.resourceName || slot.bestHistorical.resourceId)}
-                </span>
-              </div>
+              <span class="best-resource-label">Historical ${!slot.bestHistorical.isActive ? '(inactive)' : ''}</span>
+              <span class="best-resource-name ${!slot.bestHistorical.isActive ? 'best-resource-inactive' : ''}" onclick="closeModal('schematicModal'); openResourceModal('${slot.bestHistorical.resourceId}')">${escapeHtml(slot.bestHistorical.resourceName || slot.bestHistorical.resourceId)}</span>
               <span class="best-resource-score ${!slot.bestHistorical.isActive ? 'best-resource-inactive' : ''}">${slot.bestHistorical.score}</span>
             </div>
           ` : ''}
-        </div>
+        </aside>
       ` : ''}
-    </div>
+    </article>
   `;
 }
 
@@ -2909,7 +2934,7 @@ let mapPanStartX = 0;         // mouse start position for drag
 let mapPanStartY = 0;
 let mapPanStartWorldX = 0;    // world offset at drag start
 let mapPanStartWorldZ = 0;
-const MAP_ZOOM_STEPS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16]; // up to 16x zoom
+const MAP_ZOOM_STEPS = [1, 1.5, 2, 3, 4, 6, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80, 84, 88, 92, 96, 100];
 let mapZoomIndex = 0;
 
 // Map config: 16km = 16384m, center of image is world 0,0
@@ -4610,6 +4635,56 @@ async function searchPlayers() {
     `;
   } catch (error) {
     container.innerHTML = `<p style="color: var(--accent-danger); padding: 16px;">Search failed: ${escapeHtml(error.message)}</p>`;
+  }
+}
+
+async function loadProfileView() {
+  const container = document.getElementById('profileCharactersList');
+  if (!container) return;
+  container.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);"><span class="spinner"></span> Loading your characters...</p>';
+
+  try {
+    const result = await apiGet('/players/my-characters');
+    const players = result.data || [];
+
+    if (players.length === 0) {
+      container.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 20px;">No characters found for your account.</p>';
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="table-container">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Planet</th>
+              <th>Coordinates</th>
+              <th>Credits (Cash/Bank)</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${players.map(p => `
+              <tr>
+                <td style="font-weight: 600;">${escapeHtml(p.name)}</td>
+                <td>${escapeHtml(p.planet)}</td>
+                <td style="font-family: var(--font-mono); font-size: 0.8rem;">${Math.round(p.x)}, ${Math.round(p.z)}</td>
+                <td style="font-family: var(--font-mono); font-size: 0.8rem;">${(p.cash || 0).toLocaleString()} / ${(p.bank || 0).toLocaleString()}</td>
+                <td style="display: flex; gap: 4px; align-items: center;">
+                  <button class="btn btn-sm" onclick="openPlayerDetail('${p.characterObjectId}', '${escapeHtml(p.name)}')">Details</button>
+                  ${isAdmin ? `<button class="btn-admin-action" onclick="openAdminCharModal('${p.characterObjectId}', '${escapeHtml(p.name)}', '${p.stationId || ''}')">ADMIN</button>` : ''}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+      <p style="color: var(--text-secondary); font-size: 0.8rem; padding: 8px 0;">${players.length} character(s)</p>
+    `;
+  } catch (error) {
+    const status = error.message && error.message.includes('401') ? 'Please log in again.' : (error.message || 'Failed to load characters.');
+    container.innerHTML = `<p style="color: var(--accent-danger); padding: 16px;">${escapeHtml(status)}</p>`;
   }
 }
 

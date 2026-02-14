@@ -4,6 +4,7 @@ const logger = createLogger('auth-service');
 
 const AUTH_URL = 'https://swgtitan.org/auth.php';
 const ADMIN_CHECK_URL = 'https://www.swgtitan.org/admin_check.php';
+const STATION_PARSE_URL = 'https://swgtitan.org/station-parse.php';
 
 /**
  * Authenticate user against swgtitan.org
@@ -117,5 +118,31 @@ export async function checkAdminLevel(username) {
 export async function hasAdminAccess(username) {
   const result = await checkAdminLevel(username);
   return result.success && result.adminLevel >= 50;
+}
+
+/**
+ * Get station_id for a user from swgtitan.org/station-parse.php
+ * POST JSON: { user_name: username } -> { status: 'success', station_id: number } or 404
+ * @param {string} username - Website username
+ * @returns {Promise<number|null>} Station ID or null if not found / error
+ */
+export async function getStationId(username) {
+  if (!username || !username.trim()) return null;
+  try {
+    const response = await fetch(STATION_PARSE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_name: username.trim() }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok && data.status === 'success' && data.station_id != null) {
+      return Number(data.station_id);
+    }
+    logger.debug({ username, status: data.status }, 'Station ID not found');
+    return null;
+  } catch (error) {
+    logger.error({ error: error.message, username }, 'Station parse error');
+    return null;
+  }
 }
 

@@ -279,6 +279,44 @@ h1, h2, h3, h4, h5, h6 {
   gap: 24px;
 }
 
+.dashboard-simple {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  padding: 24px 16px;
+}
+
+.dashboard-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.dashboard-logo .logo-icon {
+  font-size: 3rem;
+  opacity: 0.9;
+}
+
+.dashboard-logo h1 {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.dashboard-logo .logo-subtitle {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.dashboard-chart-card {
+  width: 100%;
+  max-width: 900px;
+}
+
 .stats-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -762,6 +800,17 @@ select:focus {
   max-width: 900px;
 }
 
+.schematic-modal {
+  max-width: min(960px, 92vw);
+  max-height: 90vh;
+}
+
+.schematic-modal-body {
+  padding: 28px 32px 32px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 .modal-header {
   padding: 20px 24px;
   border-bottom: 1px solid var(--border-color);
@@ -869,19 +918,40 @@ select:focus {
 .schematic-detail {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 32px;
 }
 
 .schematic-detail-header {
   display: flex;
-  gap: 24px;
-  align-items: stretch;
+  gap: 32px;
+  align-items: flex-start;
   flex-wrap: wrap;
 }
 
 .schematic-info-column {
   flex: 1;
-  min-width: 250px;
+  min-width: 260px;
+}
+
+.schematic-description {
+  margin-bottom: 20px;
+  padding: 16px 18px;
+  background: var(--bg-primary);
+  border-radius: var(--border-radius);
+  border-left: 3px solid var(--accent-primary);
+}
+
+.schematic-description p {
+  color: var(--text-secondary);
+  margin: 0;
+  font-style: italic;
+  line-height: 1.5;
+}
+
+.schematic-info-column .resource-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .schematic-model-column {
@@ -889,6 +959,20 @@ select:focus {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+.schematic-slots-section {
+  margin-top: 8px;
+}
+
+.schematic-slots-title {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 20px 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .model-viewer-container {
@@ -901,6 +985,14 @@ select:focus {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Viewer wrapper fills container so canvas + UV controls both fit inside fixed height */
+.model-viewer-container .swg-model-viewer-wrapper {
+  align-self: stretch;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 
 /* Responsive: stack on smaller screens */
@@ -928,39 +1020,65 @@ select:focus {
 .schematic-slots {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
 }
 
 .slot-card {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 20px;
+  align-items: start;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: var(--border-radius);
-  padding: 16px;
+  padding: 20px 24px;
+  min-width: 0;
+}
+
+.slot-card.slot-card-has-best {
+  grid-template-columns: 1fr auto;
+  gap: 24px 32px;
+}
+
+@media (max-width: 560px) {
+  .slot-card.slot-card-has-best {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+.slot-card-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .slot-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .slot-name {
   font-weight: 600;
+  font-size: 1rem;
+  color: var(--text-primary);
 }
 
 .slot-quantity {
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .slot-resource-class {
   font-size: 0.9rem;
   color: var(--accent-secondary);
-  margin-bottom: 12px;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -970,15 +1088,14 @@ select:focus {
   gap: 8px;
 }
 
-/* Slot ingredient model viewer */
 .slot-ingredient-model {
   width: 100%;
-  margin-bottom: 8px;
+  max-width: 200px;
 }
 
 .slot-model-viewer {
   width: 100%;
-  height: 80px;
+  height: 88px;
   background: var(--bg-primary);
   border-radius: var(--border-radius);
   display: flex;
@@ -999,43 +1116,75 @@ select:focus {
 
 .slot-type-badge {
   font-size: 0.65rem;
-  padding: 2px 6px;
+  padding: 3px 8px;
   background: var(--accent-primary);
   color: var(--bg-primary);
-  border-radius: 3px;
+  border-radius: 4px;
   text-transform: uppercase;
   font-weight: 600;
+  letter-spacing: 0.03em;
 }
 
 .slot-weights {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-bottom: 12px;
 }
 
 .weight-tag {
-  font-size: 0.75rem;
-  padding: 4px 8px;
+  font-size: 0.78rem;
+  padding: 6px 10px;
   background: var(--bg-primary);
-  border-radius: 4px;
+  border-radius: 6px;
   font-family: var(--font-mono);
+  color: var(--text-secondary);
 }
 
 .slot-best-resources {
-  border-top: 1px solid var(--border-color);
-  padding-top: 12px;
+  min-width: 180px;
+  padding: 14px 16px;
+  background: var(--bg-primary);
+  border-radius: var(--border-radius);
+  border: 1px solid var(--border-color);
+}
+
+.slot-best-heading {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
 }
 
 .best-resource {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px 0;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.best-resource:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.best-resource:first-of-type {
+  padding-top: 0;
+}
+
+.best-resource-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .best-resource-name {
   font-weight: 500;
+  font-size: 0.95rem;
   cursor: pointer;
   color: var(--accent-secondary);
 }
@@ -1046,17 +1195,13 @@ select:focus {
 
 .best-resource-score {
   font-family: var(--font-mono);
+  font-size: 0.9rem;
   color: var(--success);
+  margin-top: 2px;
 }
 
 .best-resource-inactive {
   color: var(--text-muted);
-}
-
-.best-resource-label {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  margin-bottom: 4px;
 }
 
 /* ===== Status Badge ===== */
@@ -1287,6 +1432,25 @@ select:focus {
 .user-name {
   color: var(--text-secondary);
   font-size: 0.9rem;
+}
+
+.user-menu-btn {
+  background: none;
+  border: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+.user-menu-btn:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+.user-menu-btn.active {
+  background: var(--accent-primary);
+  color: white;
 }
 
 /* ===== Admin Badge ===== */

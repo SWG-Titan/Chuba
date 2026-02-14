@@ -78,7 +78,7 @@
               <span class="status-text">Connecting...</span>
             </div>
             <div class="user-menu">
-              <span id="currentUser" class="user-name"></span>
+              <button type="button" id="currentUser" class="user-name user-menu-btn" data-view="profile" aria-label="My profile"></button>
               <button class="btn btn-sm" onclick="logout()">Logout</button>
             </div>
           </div>
@@ -715,35 +715,35 @@
               <p style="color: var(--text-secondary); text-align: center; padding: 40px;">Enter a character name to search</p>
             </div>
           </div>
-
-          <!-- Player Detail Modal -->
-          <div id="playerDetailModal" class="modal" style="display: none;">
-            <div class="modal-backdrop" onclick="closePlayerModal()"></div>
-            <div class="modal-content" style="max-width: 850px; max-height: 85vh; overflow-y: auto;">
-              <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
-                <h2 id="playerDetailName">Player Details</h2>
-                <button class="btn btn-sm" onclick="closePlayerModal()" style="font-size: 1.2rem; padding: 4px 8px;">&times;</button>
-              </div>
-              <div class="modal-body" id="playerDetailBody">
-                <div class="loading">Loading...</div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Admin Character Actions Modal -->
-          <div id="adminCharModal" class="modal" style="display: none;">
-            <div class="modal-backdrop" onclick="closeAdminCharModal()"></div>
-            <div class="modal-content" style="max-width: 600px; max-height: 85vh; overflow-y: auto;">
-              <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
-                <h2>Admin: <span id="adminCharModalName">Character</span></h2>
-                <button class="btn btn-sm" onclick="closeAdminCharModal()" style="font-size: 1.2rem; padding: 4px 8px;">&times;</button>
-              </div>
-              <div class="modal-body" id="adminCharModalBody">
-                <div class="loading">Loading...</div>
-              </div>
-            </div>
-          </div>
         </section>
+
+        <!-- Player Detail Modal (global so profile view can use it) -->
+        <div id="playerDetailModal" class="modal" style="display: none;">
+          <div class="modal-backdrop" onclick="closePlayerModal()"></div>
+          <div class="modal-content" style="max-width: 850px; max-height: 85vh; overflow-y: auto;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <h2 id="playerDetailName">Player Details</h2>
+              <button class="btn btn-sm" onclick="closePlayerModal()" style="font-size: 1.2rem; padding: 4px 8px;">&times;</button>
+            </div>
+            <div class="modal-body" id="playerDetailBody">
+              <div class="loading">Loading...</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Admin Character Actions Modal (global) -->
+        <div id="adminCharModal" class="modal" style="display: none;">
+          <div class="modal-backdrop" onclick="closeAdminCharModal()"></div>
+          <div class="modal-content" style="max-width: 600px; max-height: 85vh; overflow-y: auto;">
+            <div class="modal-header" style="display: flex; justify-content: space-between; align-items: center;">
+              <h2>Admin: <span id="adminCharModalName">Character</span></h2>
+              <button class="btn btn-sm" onclick="closeAdminCharModal()" style="font-size: 1.2rem; padding: 4px 8px;">&times;</button>
+            </div>
+            <div class="modal-body" id="adminCharModalBody">
+              <div class="loading">Loading...</div>
+            </div>
+          </div>
+        </div>
 
         <!-- City Lookup View -->
         <section id="cityLookupView" class="view">
@@ -759,6 +759,18 @@
             </div>
             <div id="cityResults">
               <p style="color: var(--text-secondary); text-align: center; padding: 40px;">Loading cities...</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Profile View (My Characters by station id) -->
+        <section id="profileView" class="view">
+          <div class="view-header">
+            <h2>My Characters</h2>
+          </div>
+          <div style="padding: 16px;">
+            <div id="profileCharactersList">
+              <p style="color: var(--text-secondary); text-align: center; padding: 40px;">Loading your characters...</p>
             </div>
           </div>
         </section>
@@ -817,6 +829,7 @@
                     <div class="admin-btn-grid" style="margin-top: 12px;">
                       <button class="btn" onclick="adminImportWaypoints()">Import from Oracle</button>
                       <button class="btn" id="toggleWaypointCreationBtn" onclick="adminToggleWaypointCreation()">Toggle Creation</button>
+                      <button class="btn" onclick="adminPruneDuplicateWaypoints()">Prune Duplicates</button>
                       <button class="btn btn-warning" onclick="adminClearWaypoints()">Clear Local WPs</button>
                     </div>
                     <div id="waypointCreationStatus" class="admin-status-line"></div>
@@ -1131,12 +1144,12 @@
     <!-- Schematic Detail Modal -->
     <div class="modal" id="schematicModal">
       <div class="modal-backdrop" onclick="closeModal('schematicModal')"></div>
-      <div class="modal-content modal-large">
+      <div class="modal-content modal-large schematic-modal">
         <div class="modal-header">
           <h2 id="schematicModalTitle">Schematic Details</h2>
           <button class="modal-close" onclick="closeModal('schematicModal')">&times;</button>
         </div>
-        <div class="modal-body" id="schematicModalBody">
+        <div class="modal-body schematic-modal-body" id="schematicModalBody">
           <!-- Content loaded dynamically -->
         </div>
       </div>

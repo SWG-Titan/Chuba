@@ -1,258 +1,203 @@
 # Chuba - Titan Tracker
 
-A comprehensive Node.js web application for tracking game resources, crafting schematics, items, quests, and terrain for SWG (Star Wars Galaxies) server emulators.
+A Node.js web app for tracking game resources, schematics, items, quests, terrain, and players for SWG (Star Wars Galaxies) server emulators such as SWG Titan.
 
-## Features
+---
 
-### 📦 Resource Tracking
-- **Live Polling**: Continuously polls and tracks active game resources from Oracle database
-- **Historical Data**: Preserves "best-ever" resource rolls even after despawn
-- **Advanced Search**: Filter by class, stats, and custom queries (e.g., `OQ > 900`)
-- **Resource Class Tree**: Full hierarchical resource classification with icons and translated names
+## Setup
 
-### 📋 Schematic Datapad
-- **Schematic Parsing**: Parses draft schematics from server data files (TPF format)
-- **Resource Matching**: Computes optimal resources for each schematic slot based on stat weights
-- **3D Model Preview**: Renders crafted item 3D models using Three.js
-- **Ingredient Display**: Shows resource requirements with translated names
+### Prerequisites
 
-### ⚔️ Armory (Items)
-- **Master Item Database**: Parses and stores all game items with full stats
-- **Item Search**: Search by name, template, category, or tier
-- **Stat Details**: Displays armor stats, weapon damage, and item properties
+- **Node.js** 18 or higher (20 LTS recommended)
+- **Oracle Instant Client** (only if you need live game data: resources, players, cities, status)
+- **Game data paths** (dsrc / serverdata) for schematics, items, quests, terrain, and resource names
 
-### 📜 Quest Journal
-- **Quest Database**: Parses quest datatables (questlist/questtask)
-- **Task Visualization**: Shows quest steps, waypoints, and rewards
-- **String Resolution**: Translates quest text from STF files
-- **Filtering**: Search by level, type, category, faction, or planet
-
-### 🗺️ Cartographer (Terrain)
-- **Terrain Rendering**: 3D terrain visualization using heightmaps
-- **Shader-Based Coloring**: Applies terrain colors from shader families
-- **Buildout Objects**: Displays static world objects
-- **Player Buildings**: Shows player-placed structures from database
-
-### 🔧 Admin Panel
-- **Real-time Monitoring**: View system health, resource counts, and sync status
-- **Manual Sync**: Trigger resource/schematic polling on demand
-- **Error Tracking**: View and clear error logs
-- **Database Management**: Clear caches, rebuild indexes
-
-## Prerequisites
-
-- Node.js 20 LTS or higher
-- Oracle Instant Client (for Oracle DB connection)
-- Access to SWG server's Oracle database (read-only)
-- Access to game data files (dsrc, serverdata paths)
-
-## Installation
+### 1. Clone and install
 
 ```bash
-# Clone the repository
 git clone <repository-url>
-cd chuba
+cd Chuba
 
-# Install dependencies
 npm install
+```
 
-# Copy and configure environment
+### 2. Environment configuration
+
+Copy the example env file and edit it with your paths and credentials:
+
+```bash
 cp .env.example .env
-# Edit .env with your settings
+```
 
-# Run database migrations
+Edit `.env` with your values:
+
+| Variable | Purpose |
+|----------|---------|
+| `ORACLE_USER`, `ORACLE_PASSWORD`, `ORACLE_CONNECTION_STRING` | Read-only Oracle connection to the SWG game database (resources, players, status). Omit or leave wrong to run in offline mode. |
+| `LOCAL_DB_PATH` | SQLite file for local cache (default `./data/chuba.db`). |
+| `SCHEMATIC_SOURCE_PATH`, `STRINGS_PATH`, `DATATABLE_PATH`, `SERVER_BASE_PATH`, `SHARED_BASE_PATH` | Paths to dsrc/compiled game data for schematics and crafting. |
+| `MASTER_ITEM_PATH`, `ITEM_STATS_PATH` | Paths for the item/armory database. |
+| `CLIENT_DATA_PATH` | Path to client game data for 3D models. |
+| `TERRAIN_PATH` | Path to terrain data for the Cartographer. |
+| `RESOURCE_TREE_PATH`, `RESOURCE_NAMES_PATH` | Resource tree and names for the resource tracker. |
+| `QUEST_LIST_PATH`, `QUEST_TASK_PATH`, `QUEST_STRINGS_PATH` | Quest datatables and strings for the Quest Journal. |
+| `API_PORT`, `API_HOST` | Server port and bind address (default `3000`, `0.0.0.0`). |
+| `POLL_INTERVAL_MINUTES` | How often to poll Oracle for resources (default `5`). |
+| `LOG_LEVEL` | Logging level (e.g. `info`, `debug`). |
+| `DISCORD_WEBHOOK_URL`, `ENABLE_DISCORD_ALERTS` | Optional Discord alerts on start/failure. |
+
+Paths can be Windows or Linux style; adjust for your SWG install (e.g. Titan `dsrc` / `data` layout).
+
+### 3. Local database (first run)
+
+Create the SQLite DB and run migrations:
+
+```bash
 npm run migrate
+```
 
-# (Optional) Seed with sample data for testing
+Optional: seed test data:
+
+```bash
 npm run seed
+```
 
-# Start the service
+### 4. Start the app
+
+```bash
 npm start
 ```
 
-## Configuration
+For development with auto-restart on file changes:
 
-Create a `.env` file based on `.env.example`:
+```bash
+npm run dev
+```
+
+The app will:
+
+- Create `./data` if needed and use the SQLite DB at `LOCAL_DB_PATH`.
+- Try to connect to Oracle; if it fails, it runs in **offline mode** (no live resources/players/status).
+- Serve the web UI at **http://localhost:3000** (or the host/port you set in `.env`).
+
+Open that URL in a browser to use the app.
+
+---
+
+## Usage
+
+### Logging in
+
+- Use your **SWG Titan website** username and password (same as swgtitan.org).
+- Login is validated against the Titan auth endpoint; session is kept in a cookie.
+- Some features (e.g. **Profile – My Characters**) require a valid station ID from the Titan site (`station-parse.php`).
+
+### After login
+
+- **Dashboard** – Logo and **Player Count Over Time** graph (24h / 7d / 30d). Requires Oracle and status polling.
+- **Resources** – Search and filter live/historical resources; view by class and stats. Requires Oracle and resource polling.
+- **Schematic Datapad** – Browse schematics, see best resources per slot, view 3D model. Uses local schematic + resource data.
+- **Armory** – Search items by name, template, category, tier; view stats. Uses local item datatables.
+- **Quest Journal** – Browse and search quests; view tasks and rewards. Uses local quest datatables and STF strings.
+- **Cartographer** – Terrain and waypoints; optional player overlay (admin). Uses terrain data and optional Oracle.
+- **Lookup** (dropdown)  
+  - **Players** – Search by character name; view details, inventory, and (if admin) admin actions.  
+  - **Cities** – List/filter cities. Requires Oracle.
+- **Profile** – Click your **username** in the header to open **My Characters** (characters tied to your station ID). Same Details/Admin actions as Player Lookup.
+- **Admin Panel** (if your account has admin level ≥ 50) – Health, manual sync, errors, cache and DB management.
+
+### Typical workflow
+
+1. Log in with your Titan credentials.
+2. Use **Dashboard** for population over time (if Oracle is configured).
+3. Use **Resources** to find materials for crafting; use **Schematic Datapad** to match schematics to best resources.
+4. Use **Armory** to look up items; use **Quest Journal** to browse quests.
+5. Use **Lookup → Players** to search characters; use **Profile** (username) to see your own characters and open details/admin like in Player Lookup.
+
+---
+
+## Configuration reference
+
+Example `.env` (minimal; adjust paths to your install):
 
 ```env
-# Oracle Database Connection
+# Oracle (optional; omit for offline)
 ORACLE_USER=swg_reader
 ORACLE_PASSWORD=your_password
 ORACLE_CONNECTION_STRING=localhost:1521/swgdb
 
-# Local Database
 LOCAL_DB_PATH=./data/chuba.db
 
-# Schematic Source
-SCHEMATIC_SOURCE_PATH=/path/to/schematics
+# Example paths (Windows); use your dsrc/data roots
+SCHEMATIC_SOURCE_PATH=D:/titan/dsrc/sku.0/sys.server/compiled/game/object/draft_schematic/
+STRINGS_PATH=D:/titan/data/sku.0/sys.client/compiled/game/string/en/
+DATATABLE_PATH=D:/titan/dsrc/sku.0/sys.server/compiled/game/datatables/crafting/
+SERVER_BASE_PATH=D:/titan/dsrc/sku.0/sys.server/compiled/game/
+SHARED_BASE_PATH=D:/titan/dsrc/sku.0/sys.shared/compiled/game/
 
-# Polling
-POLL_INTERVAL_MINUTES=5
+MASTER_ITEM_PATH=D:/titan/dsrc/sku.0/sys.server/compiled/game/datatables/item/master_item/
+ITEM_STATS_PATH=D:/titan/dsrc/sku.0/sys.server/compiled/game/datatables/item/
+CLIENT_DATA_PATH=D:/titan/data/sku.0/sys.client/compiled/game/
+TERRAIN_PATH=D:/titan/data/sku.0/sys.client/compiled/game/terrain/
 
-# API
+RESOURCE_TREE_PATH=D:/titan/dsrc/sku.0/sys.shared/compiled/game/datatables/resource/resource_tree.tab
+RESOURCE_NAMES_PATH=D:/titan/data/sku.0/sys.client/compiled/game/string/en/resource/resource_names.tab
+
+QUEST_LIST_PATH=D:/titan/dsrc/sku.0/sys.shared/compiled/game/datatables/questlist/
+QUEST_TASK_PATH=D:/titan/dsrc/sku.0/sys.shared/compiled/game/datatables/questtask/
+QUEST_STRINGS_PATH=D:/titan/serverdata/string/en/quest/ground/
+
 API_PORT=3000
 API_HOST=0.0.0.0
-
-# Logging
+POLL_INTERVAL_MINUTES=5
 LOG_LEVEL=info
-
-# Alerts (Optional)
-DISCORD_WEBHOOK_URL=
-ENABLE_DISCORD_ALERTS=false
 ```
 
-## API Endpoints
+---
 
-### Resources
+## Features (overview)
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/resources` | List all resources |
-| GET | `/api/resources/:id` | Get resource by ID |
-| GET | `/api/resources/best` | Get best resources by class |
-| GET | `/api/resources/stats` | Get resource statistics |
+| Area | Description |
+|------|-------------|
+| **Resources** | Live polling from Oracle, best-ever rolls, search/filter by class and stats. |
+| **Schematics** | Parse TPF/draft schematics, match best resources per slot, 3D model preview. |
+| **Armory** | Master item DB, search by name/template/category/tier, armor/weapon stats. |
+| **Quest Journal** | Quest list/task datatables, STF strings, waypoints and rewards. |
+| **Cartographer** | Terrain, waypoints, optional player-on-planet overlay (admin). |
+| **Player Lookup** | Search by name, details, inventory; admin: rename, move, race, lock account. |
+| **Profile** | My Characters by station ID (Titan); same lookup behavior as Player Lookup. |
+| **Cities** | List/filter cities from Oracle. |
+| **Admin** | Health, manual sync, errors, cache/DB management (admin level ≥ 50). |
 
-### Schematics
+---
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/schematics` | List all schematics |
-| GET | `/api/schematics/:id` | Get schematic details |
-| GET | `/api/schematics/:id/best-resources` | Get best resources for schematic |
-| GET | `/api/schematics/:id/slots/:index/top-resources` | Get top N resources for a slot |
-| GET | `/api/schematics/categories` | List schematic categories |
-| POST | `/api/schematics/sync` | Manually trigger schematic sync |
+## API (summary)
 
-### Health & Admin
+- **Auth:** `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session`, `GET /api/auth/check-admin`
+- **Resources:** `GET /api/resources`, `GET /api/resources/:id`, etc.
+- **Schematics:** `GET /api/schematics`, `GET /api/schematics/:id`, `GET /api/schematics/:id/best-resources`, etc.
+- **Items:** `GET /api/items`, `GET /api/items/:id`, etc.
+- **Quests:** `GET /api/quests`, `GET /api/quests/:id`, etc.
+- **Status:** `GET /api/status/current`, `GET /api/status/history`
+- **Players:** `GET /api/players/search`, `GET /api/players/my-characters`, `GET /api/players/:id`, etc.
+- **Health:** `GET /api/health`, `GET /api/health/stats`
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/health` | Health check |
-| GET | `/api/health/stats` | System statistics |
-| GET | `/api/health/polls` | Poll history |
-| POST | `/api/health/poll/resources` | Trigger resource poll |
-| POST | `/api/health/poll/schematics` | Trigger schematic sync |
+All relevant endpoints use the session cookie when login is required.
 
-## Example API Responses
+---
 
-### Get Best Resources for Schematic
+## Scripts
 
-```json
-GET /api/schematics/weapon_blaster_rifle_basic/best-resources
+| Command | Description |
+|---------|-------------|
+| `npm start` | Start the server (production). |
+| `npm run dev` | Start with `--watch` (restart on file change). |
+| `npm run migrate` | Run SQLite migrations. |
+| `npm run seed` | Seed test data into SQLite. |
+| `npm test` | Run tests. |
 
-{
-  "success": true,
-  "data": {
-    "schematicId": "weapon_blaster_rifle_basic",
-    "schematicName": "Basic Blaster Rifle",
-    "overallScore": 756,
-    "slots": [
-      {
-        "slotIndex": 0,
-        "slotName": "Stock",
-        "resourceClass": "Hardwood",
-        "quantity": 10,
-        "bestActive": {
-          "resourceId": "res_123",
-          "resourceName": "PrimeWoodAlpha",
-          "score": 823,
-          "scoreBreakdown": {
-            "OQ": { "value": 890, "weight": 0.5, "contribution": 445 },
-            "CD": { "value": 720, "weight": 0.3, "contribution": 216 },
-            "DR": { "value": 810, "weight": 0.2, "contribution": 162 }
-          }
-        },
-        "bestHistorical": {
-          "resourceId": "res_456",
-          "resourceName": "UltraWoodOmega",
-          "score": 912,
-          "isActive": false
-        }
-      }
-    ]
-  }
-}
-```
-
-## Docker Deployment
-
-```bash
-# Build and run with Docker Compose
-docker-compose up -d
-
-# View logs
-docker-compose logs -f chuba
-```
-
-## Architecture
-
-```
-src/
-├── api/                 # Express REST API
-│   ├── server.js       # API server setup
-│   ├── resources.js    # Resource endpoints
-│   ├── schematics.js   # Schematic endpoints
-│   └── health.js       # Health check endpoints
-├── config/             # Configuration
-├── database/           # Database connections
-│   ├── local-db.js     # SQLite (local persistence)
-│   ├── oracle-db.js    # Oracle (game data source)
-│   ├── migrate.js      # Migration runner
-│   └── seed.js         # Test data seeder
-├── services/           # Business logic
-│   ├── resource-service.js   # Resource operations
-│   ├── schematic-service.js  # Schematic parsing
-│   ├── matching-service.js   # Resource-schematic matching
-│   └── polling-service.js    # Scheduled polling
-├── utils/              # Utilities
-│   ├── logger.js       # Logging
-│   ├── alerts.js       # Discord alerts
-│   └── resource-helpers.js  # Resource utilities
-└── index.js            # Application entry point
-```
-
-## Development
-
-```bash
-# Run in development mode with auto-reload
-npm run dev
-
-# Run tests
-npm test
-```
-
-## Resource Stats
-
-The system tracks these resource statistics:
-
-| Stat | Name |
-|------|------|
-| OQ | Overall Quality |
-| CD | Conductivity |
-| DR | Decay Resistance |
-| FL | Flavor |
-| HR | Heat Resistance |
-| MA | Malleability |
-| PE | Potential Energy |
-| SR | Shock Resistance |
-| UT | Unit Toughness |
-| CR | Cold Resistance |
-| ER | Entangle Resistance |
-
-## Scoring Algorithm
-
-Resources are scored for schematics using weighted averages:
-
-```
-score = Σ(stat_value × weight) / Σ(weights)
-```
-
-Example for a slot with weights `{OQ: 0.5, CD: 0.3, DR: 0.2}`:
-```
-score = (OQ × 0.5 + CD × 0.3 + DR × 0.2)
-```
+---
 
 ## License
 
 ISC
-

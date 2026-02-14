@@ -23,7 +23,7 @@ class IFFReader {
   }
 
   readFloat() {
-    const value = this. view.getFloat32(this. offset, true);
+    const value = this.view.getFloat32(this.offset, true);
     this.offset += 4;
     return value;
   }
@@ -59,7 +59,7 @@ class IFFReader {
 
   exitForm() {
     if (this.formStack.length > 0) {
-      const form = this. formStack.pop();
+      const form = this.formStack.pop();
       this.offset = form.endOffset;
     }
   }

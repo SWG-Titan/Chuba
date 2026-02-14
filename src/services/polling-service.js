@@ -12,7 +12,7 @@ import {
 } from './resource-service.js';
 import { syncSchematics } from './schematic-service.js';
 import { invalidateMatchCache, recomputeAffectedMatches } from './matching-service.js';
-import { syncWaypointsFromOracle } from './waypoint-service.js';
+import { syncWaypointsFromOracle, pruneDuplicateWaypoints } from './waypoint-service.js';
 import { ensureSTFReaderLoaded } from '../parsers/stf-parser.js';
 import { pollStatus } from './status-service.js';
 
@@ -224,6 +224,10 @@ export function startPolling() {
       const stats = await syncWaypointsFromOracle();
       logger.info(stats, 'Scheduled waypoint sync completed');
       logPoll('waypoint', 'success', stats, Date.now());
+      const prune = pruneDuplicateWaypoints();
+      if (prune.deleted > 0) {
+        logger.info(prune, 'Scheduled waypoint prune completed');
+      }
     } catch (error) {
       logger.error({ error: error.message }, 'Scheduled waypoint sync failed');
       logPoll('waypoint', 'error', {}, Date.now(), error.message);
@@ -249,6 +253,10 @@ export function startPolling() {
     try {
       await syncWaypointsFromOracle();
       logger.info('Initial waypoint sync completed');
+      const prune = pruneDuplicateWaypoints();
+      if (prune.deleted > 0) {
+        logger.info(prune, 'Initial waypoint prune completed');
+      }
     } catch (error) {
       logger.error({ error: error.message }, 'Initial waypoint sync failed');
     }

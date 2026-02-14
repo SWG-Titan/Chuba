@@ -25,6 +25,7 @@ import {
   getLocationSceneMappings,
   setLocationSceneMapping,
   deleteLocationSceneMapping,
+  pruneDuplicateWaypoints,
   PLANET_MAP_CONFIG,
 } from '../services/waypoint-service.js';
 
@@ -800,6 +801,24 @@ router.delete('/location-scene-mappings/:idOrScene', requireAdmin, (req, res) =>
     res.json({ success: true, message: 'Mapping deleted' });
   } catch (error) {
     logger.error({ error: error.message }, 'Failed to delete location-scene mapping');
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/admin/waypoints/prune-duplicates
+ * Remove duplicate waypoints (same planet, name, x, y, z). Keeps one per group.
+ */
+router.post('/waypoints/prune-duplicates', requireAdmin, (req, res) => {
+  try {
+    const result = pruneDuplicateWaypoints();
+    res.json({
+      success: true,
+      message: `Pruned ${result.deleted} duplicate waypoint(s) in ${result.groupsPruned} location(s)`,
+      data: result,
+    });
+  } catch (error) {
+    logger.error({ error: error.message }, 'Failed to prune duplicate waypoints');
     res.status(500).json({ success: false, error: error.message });
   }
 });

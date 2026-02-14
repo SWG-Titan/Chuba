@@ -162,12 +162,13 @@ export function parseSchematicFile(filePath, stringsPath = null, serverBasePath 
                   ingredient.resolved_name = resolveStringRef(ingredient.name_file, ingredient.name_key, stringsPath);
                 }
 
-                // If ingredient is a template (.iff), read its TPF for objectName
-                if (isTemplateIngredient(option.ingredient_type) && ingredient.ingredient && serverBasePath) {
+                // If ingredient is a template (.iff), resolve name from shared then server TPF via STF
+                if (isTemplateIngredient(option.ingredient_type) && ingredient.ingredient && (sharedBasePath || serverBasePath)) {
                   const ingredientStrings = resolveTemplateIngredientStrings(
                     ingredient.ingredient,
                     stringsPath,
-                    serverBasePath
+                    serverBasePath,
+                    sharedBasePath
                   );
                   if (ingredientStrings) {
                     ingredient.resolved_name = ingredientStrings.name || ingredient.resolved_name;
@@ -180,11 +181,12 @@ export function parseSchematicFile(filePath, stringsPath = null, serverBasePath 
         }
 
         // Also resolve for the primary ingredient if directly on slot
-        if (slot.resource_class && isTemplateIngredient(slot.ingredient_type) && serverBasePath) {
+        if (slot.resource_class && isTemplateIngredient(slot.ingredient_type) && (sharedBasePath || serverBasePath)) {
           const ingredientStrings = resolveTemplateIngredientStrings(
             slot.resource_class,
             stringsPath,
-            serverBasePath
+            serverBasePath,
+            sharedBasePath
           );
           if (ingredientStrings) {
             slot.ingredient_name = ingredientStrings.name;
@@ -412,43 +414,71 @@ function resolveSchematicName(sharedTemplate, stringsPath, serverBasePath, share
 }
 
 /**
- * Resolve ingredient name and description from template ingredient's TPF
- * @param {string} ingredientPath - Ingredient template path (e.g., "object/tangible/component/...")
- * @param {string} stringsPath - Path to string files
+ * Resolve ingredient name and description from template ingredient's TPF.
+ * Tries shared template path first (shared_<basename>.tpf), then server TPF; resolves objectName via STF.
+ * @param {string} ingredientPath - Ingredient template path (e.g., "object/tangible/furniture/all/frn_all_trophy_bane_back_spider_new.iff")
+ * @param {string} stringsPath - Path to string files (STF)
  * @param {string} serverBasePath - Server base path
+ * @param {string} sharedBasePath - Shared base path (for shared_*.tpf)
  * @returns {Object|null} { name, description }
  */
-function resolveTemplateIngredientStrings(ingredientPath, stringsPath, serverBasePath) {
-  if (!ingredientPath || !serverBasePath) return null;
+function resolveTemplateIngredientStrings(ingredientPath, stringsPath, serverBasePath, sharedBasePath = null) {
+  if (!ingredientPath || !stringsPath) return null;
+
+  const result = { name: null, description: null };
 
   try {
-    // Convert ingredient path to full TPF path
-    let tpfPath = ingredientPath;
-
-    // Handle .iff extension - remove it and add .tpf
-    if (ingredientPath.endsWith('.iff')) {
-      tpfPath = ingredientPath.slice(0, -4) + '.tpf';
-    } else if (!ingredientPath.endsWith('.tpf')) {
-      tpfPath = ingredientPath + '.tpf';
+    // Normalize: strip .iff for path building
+    let templatePath = ingredientPath;
+    if (templatePath.endsWith('.iff')) {
+      templatePath = templatePath.slice(0, -4);
+    } else if (templatePath.endsWith('.tpf')) {
+      templatePath = templatePath.slice(0, -4);
     }
 
-    // If it starts with "object/", it's a relative server path
-    if (tpfPath.startsWith('object/')) {
-      tpfPath = path.join(serverBasePath, tpfPath);
+    const lastSlash = templatePath.lastIndexOf('/');
+    const dir = lastSlash >= 0 ? templatePath.substring(0, lastSlash) : '';
+    const basename = lastSlash >= 0 ? templatePath.substring(lastSlash + 1) : templatePath;
+
+    // 1) Try shared template path first (shared_<basename>.tpf) — same as resolveCraftedObjectStrings / quest-service
+    if (sharedBasePath) {
+      const sharedFilename = `shared_${basename}.tpf`;
+      const sharedRelativePath = dir ? `${dir}/${sharedFilename}` : sharedFilename;
+      const sharedPath = path.join(sharedBasePath, sharedRelativePath);
+
+      if (fs.existsSync(sharedPath)) {
+        const stringRefs = parseTPFStringRefs(sharedPath);
+        if (stringRefs) {
+          if (stringRefs.objectNameFile && stringRefs.objectNameKey) {
+            result.name = resolveStringRef(stringRefs.objectNameFile, stringRefs.objectNameKey, stringsPath);
+          }
+          if (stringRefs.detailedDescFile && stringRefs.detailedDescKey) {
+            result.description = resolveStringRef(stringRefs.detailedDescFile, stringRefs.detailedDescKey, stringsPath);
+          }
+          if (result.name || result.description) {
+            return result;
+          }
+        }
+      }
     }
 
-    // Read the ingredient TPF for objectName and detailedDescription
-    const stringRefs = parseTPFStringRefs(tpfPath);
-    if (!stringRefs) return null;
-
-    const result = { name: null, description: null };
-
-    if (stringRefs.objectNameFile && stringRefs.objectNameKey) {
-      result.name = resolveStringRef(stringRefs.objectNameFile, stringRefs.objectNameKey, stringsPath);
-    }
-
-    if (stringRefs.detailedDescFile && stringRefs.detailedDescKey) {
-      result.description = resolveStringRef(stringRefs.detailedDescFile, stringRefs.detailedDescKey, stringsPath);
+    // 2) Fall back to server TPF (same directory as .iff, same basename .tpf)
+    if (serverBasePath && templatePath.startsWith('object/')) {
+      const serverTpfPath = path.join(serverBasePath, templatePath + '.tpf');
+      if (fs.existsSync(serverTpfPath)) {
+        const stringRefs = parseTPFStringRefs(serverTpfPath);
+        if (stringRefs) {
+          if (stringRefs.objectNameFile && stringRefs.objectNameKey) {
+            result.name = resolveStringRef(stringRefs.objectNameFile, stringRefs.objectNameKey, stringsPath);
+          }
+          if (stringRefs.detailedDescFile && stringRefs.detailedDescKey) {
+            result.description = resolveStringRef(stringRefs.detailedDescFile, stringRefs.detailedDescKey, stringsPath);
+          }
+          if (result.name || result.description) {
+            return result;
+          }
+        }
+      }
     }
 
     return (result.name || result.description) ? result : null;
@@ -828,13 +858,12 @@ export function resolveIffDisplayName(iffPath) {
   const sharedBasePath = config.schematic.sharedBasePath;
   const serverBasePath = config.schematic.serverBasePath;
 
-  // Try shared path first (resolveCraftedObjectStrings pattern)
+  // resolveTemplateIngredientStrings tries shared then server and resolves via STF
+  const resolved = resolveTemplateIngredientStrings(iffPath, stringsPath, serverBasePath, sharedBasePath);
+  if (resolved?.name) return resolved.name;
+
   const shared = resolveCraftedObjectStrings(iffPath, stringsPath, sharedBasePath);
   if (shared?.name) return shared.name;
-
-  // Try server path (resolveTemplateIngredientStrings pattern)
-  const server = resolveTemplateIngredientStrings(iffPath, stringsPath, serverBasePath);
-  if (server?.name) return server.name;
 
   return null;
 }

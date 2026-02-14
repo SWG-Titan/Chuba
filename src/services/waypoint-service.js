@@ -18,9 +18,39 @@
 import { executeOracleQuery } from '../database/oracle-db.js';
 import { getLocalDb } from '../database/local-db.js';
 import { createLogger } from '../utils/logger.js';
+import { resolveStringRef } from '../parsers/stf-parser.js';
+import { config } from '../config/index.js';
 import crypto from 'crypto';
 
 const logger = createLogger('waypoint-service');
+
+/** Base path to STF (.tab) string files */
+const getStringsPath = () => config.schematic?.stringsPath || '';
+
+/**
+ * If waypoint name starts with "@", resolve it as an STF reference (e.g. @item_n:armor_segment).
+ * Otherwise return the name unchanged.
+ * @param {string} name - Raw name from DB (may be @file:key)
+ * @returns {string} Resolved display name or original name
+ */
+function resolveWaypointName(name) {
+  if (!name || typeof name !== 'string') return name || 'Waypoint';
+  const trimmed = name.trim();
+  if (!trimmed.startsWith('@')) return trimmed;
+  const ref = trimmed.slice(1);
+  const colon = ref.indexOf(':');
+  if (colon === -1) return trimmed;
+  const file = ref.slice(0, colon).trim();
+  const key = ref.slice(colon + 1).trim();
+  if (!file || !key) return trimmed;
+  try {
+    const resolved = resolveStringRef(file, key, getStringsPath());
+    return resolved || trimmed;
+  } catch (err) {
+    logger.debug({ name: trimmed, err: err.message }, 'Waypoint STF resolve failed');
+    return trimmed;
+  }
+}
 
 /**
  * Planet map sizes in game-world meters (diameter).
@@ -261,27 +291,36 @@ export async function syncWaypointsFromOracle() {
 // ===== Local CRUD operations =====
 
 /**
- * Get all waypoints, optionally filtered by planet
+ * Get all waypoints, optionally filtered by planet.
+ * Names starting with "@" (e.g. @item_n:armor_segment) are resolved via STF string files.
  * @param {string} [planet] - Filter by planet
- * @returns {Array} Waypoints
+ * @returns {Array} Waypoints (with resolved display names)
  */
 export function getWaypoints(planet) {
   const db = getLocalDb();
-
-  if (planet) {
-    return db.prepare('SELECT * FROM waypoints WHERE planet = ? ORDER BY name').all(planet);
-  }
-  return db.prepare('SELECT * FROM waypoints ORDER BY planet, name').all();
+  const rows = planet
+    ? db.prepare('SELECT * FROM waypoints WHERE planet = ? ORDER BY name').all(planet)
+    : db.prepare('SELECT * FROM waypoints ORDER BY planet, name').all();
+  return rows.map(row => ({
+    ...row,
+    name: resolveWaypointName(row.name),
+  }));
 }
 
 /**
- * Get a single waypoint by ID
+ * Get a single waypoint by ID.
+ * If name starts with "@", it is resolved via STF string files.
  * @param {string} waypointId
  * @returns {Object|null}
  */
 export function getWaypointById(waypointId) {
   const db = getLocalDb();
-  return db.prepare('SELECT * FROM waypoints WHERE waypoint_id = ?').get(waypointId);
+  const row = db.prepare('SELECT * FROM waypoints WHERE waypoint_id = ?').get(waypointId);
+  if (!row) return null;
+  return {
+    ...row,
+    name: resolveWaypointName(row.name),
+  };
 }
 
 /**
@@ -393,6 +432,40 @@ export function getWaypointStats() {
     byPlanet,
     bySource,
   };
+}
+
+/**
+ * Prune duplicate waypoint entries. Duplicates = same planet, name, x, y, z.
+ * Keeps one per group (lowest id), deletes the rest (both local and oracle-sourced in SQLite).
+ * @returns {{ deleted: number, groupsPruned: number }}
+ */
+export function pruneDuplicateWaypoints() {
+  const db = getLocalDb();
+  const rows = db.prepare('SELECT id, waypoint_id, planet, name, x, y, z FROM waypoints').all();
+  const key = (r) => `${r.planet}|${r.name}|${Number(r.x)}|${Number(r.y)}|${Number(r.z)}`;
+  const groups = new Map();
+  for (const r of rows) {
+    const k = key(r);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  }
+  let deleted = 0;
+  let groupsPruned = 0;
+  const deleteStmt = db.prepare('DELETE FROM waypoints WHERE waypoint_id = ?');
+  for (const [, arr] of groups) {
+    if (arr.length <= 1) continue;
+    groupsPruned++;
+    arr.sort((a, b) => a.id - b.id);
+    const toKeep = arr[0];
+    for (let i = 1; i < arr.length; i++) {
+      deleteStmt.run(arr[i].waypoint_id);
+      deleted++;
+    }
+  }
+  if (deleted > 0) {
+    logger.info({ deleted, groupsPruned }, 'Pruned duplicate waypoints');
+  }
+  return { deleted, groupsPruned };
 }
 
 /**
