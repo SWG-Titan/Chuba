@@ -233,20 +233,26 @@ Use **Admin Panel → Paths** to verify that configured paths exist and are read
 
 ## API Overview
 
-See [API.md](API.md) for full documentation. Summary:
+Full documentation: [API.md](API.md). Live API demo: **[test.swgtitan.org:1526](http://test.swgtitan.org:1526)**.
 
-- **Auth:** `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session`, `GET /api/auth/check-admin`
-- **Resources:** `GET /api/resources`, `GET /api/resources/:id`, `GET /api/resources/best`, etc.
-- **Schematics:** `GET /api/schematics`, `GET /api/schematics/:id`, `GET /api/schematics/:id/best-resources`, etc.
-- **Items:** `GET /api/items`, `GET /api/items/:id`, `GET /api/items/by-template/*`, etc.
-- **Quests:** `GET /api/quests`, `GET /api/quests/:questName`, etc.
-- **Waypoints:** `GET /api/waypoints`, `GET /api/waypoints/planets`, CRUD for local waypoints
-- **Players:** `GET /api/players/search`, `GET /api/players/:id`, admin endpoints
-- **Cities:** `GET /api/cities`, `GET /api/cities/:id`
-- **Status:** `GET /api/status/current`, `GET /api/status/history`
-- **Health:** `GET /api/health`, `GET /api/health/stats`
+All **public (non-admin)** routes:
 
-Endpoints that require login use the session cookie; admin endpoints require `adminLevel >= 50`.
+| Area | Methods and routes |
+|------|--------------------|
+| **Auth** | `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/session`, `GET /api/auth/check-admin` |
+| **Health** | `GET /api/health`, `GET /api/health/stats`, `GET /api/health/polls` |
+| **Resources** | `GET /api/resources`, `GET /api/resources/classes`, `GET /api/resources/class-info/:className`, `GET /api/resources/stats`, `GET /api/resources/best`, `GET /api/resources/:id` |
+| **Schematics** | `GET /api/schematics`, `GET /api/schematics/categories`, `GET /api/schematics/by-resource-class/:class`, `GET /api/schematics/:id`, `GET /api/schematics/:id/best-resources`, `GET /api/schematics/:id/slots/:slotIndex/top-resources` |
+| **Items** | `GET /api/items`, `GET /api/items/search`, `GET /api/items/stats`, `GET /api/items/categories`, `GET /api/items/types`, `GET /api/items/columns`, `GET /api/items/by-template/*`, `GET /api/items/:id`, `POST /api/items/load-stats`, `PUT /api/items/columns`, `PUT /api/items/columns/:columnName` |
+| **Quests** | `GET /api/quests`, `GET /api/quests/categories`, `GET /api/quests/types`, `GET /api/quests/planets`, `GET /api/quests/reload`, `GET /api/quests/:questName` |
+| **Waypoints** | `GET /api/waypoints/planets`, `GET /api/waypoints/stats`, `GET /api/waypoints/settings/creation`, `POST /api/waypoints/settings/creation`, `GET /api/waypoints`, `GET /api/waypoints/:id`, `POST /api/waypoints`, `PUT /api/waypoints/:id`, `DELETE /api/waypoints/:id` |
+| **Players** | `GET /api/players/search`, `GET /api/players/:id`, `GET /api/players/:id/inventory` |
+| **Cities** | `GET /api/cities`, `GET /api/cities/:id` |
+| **Status** | `GET /api/status/current`, `GET /api/status/history`, `POST /api/status/poll` |
+| **Models (3D)** | `GET /api/models/texture/*`, `GET /api/models/template/*`, `GET /api/models/schematic/:schematicId` |
+| **Terrain** | `GET /api/terrain/planets`, `GET /api/terrain/heightmap/:planetName`, `GET /api/terrain/buildouts/:planetName`, `GET /api/terrain/objects/:planetName`, `GET /api/terrain/info/:planetName`, `GET /api/terrain/shaders/:planetName` |
+
+Endpoints that require login use the session cookie. Admin-only routes (e.g. `/api/admin/*`, `POST /api/players/:id/rename`, `POST /api/waypoints/sync`) require `adminLevel >= 50`; see [API.md](API.md).
 
 ---
 
