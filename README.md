@@ -1,6 +1,8 @@
-# Chuba – Titan Tracker
+# Chuba – SWG Emulator Tracker
 
-A Node.js web application for **SWG (Star Wars Galaxies)** server emulators such as SWG Titan. It provides resource tracking, schematic browsing, item lookup, quest journal, terrain mapping, and player/city administration.
+A Node.js web application for **SWG (Star Wars Galaxies)** server emulators. It provides resource tracking, schematic browsing, item lookup, quest journal, terrain mapping, and player/city administration.
+
+> **Compatibility note:** Chuba was originally built for **SWG: Titan**. If you are running another emulator stack, replace all deployment-specific references (auth URLs, status URLs, hostnames, branding text, and related config) to match your environment.
 
 ---
 
@@ -97,7 +99,7 @@ The app serves the UI at **http://localhost:3000** (or your configured host/port
 
 ## File layout by feature
 
-Each feature expects specific SWG game files. Paths vary by server layout (Titan, SRC, custom). Typical roots: `dsrc/` and `data/` (or `serverdata/`) for compiled/string data.
+Each feature expects specific SWG game files. Paths vary by server layout (SRC, custom, legacy forks). Typical roots: `dsrc/` and `data/` (or `serverdata/`) for compiled/string data.
 
 **Strings:** Where the app expects `.tab` string files (e.g. under `STRINGS_PATH`, `RESOURCE_NAMES_PATH`, `QUEST_STRINGS_PATH`), game `.stf` assets must be dumped to `.tab` first. Use **Aconite's LocalizationToolCon_d.exe** to export STF to tab format.
 
@@ -211,9 +213,9 @@ Use **Admin Panel → Paths** to verify that configured paths exist and are read
 
 ## Authentication
 
-- Login uses your **SWG Titan website** credentials (same as swgtitan.org).
-- Auth is validated against the Titan auth endpoint; sessions use a cookie.
-- **Profile → My Characters** uses station ID from the Titan site.
+- Login uses your emulator website credentials.
+- Auth is validated against your configured auth endpoint; sessions use a cookie.
+- **Profile → My Characters** uses station ID from your configured account endpoint.
 
 ---
 
@@ -225,7 +227,7 @@ This section covers daily usage for both regular users and admins.
 
 1. Start the app with `npm start`.
 2. Open `http://localhost:3000` (or your configured host/port).
-3. Log in with your Titan account.
+3. Log in with your emulator account.
 4. Verify data is loading:
    - `Dashboard` shows server status/player history.
    - `Resources` returns current resources.
@@ -376,7 +378,7 @@ Use with care in non-production first:
 
 ## API Overview
 
-Full documentation: [API.md](API.md). Live API demo: **[test.swgtitan.org:1526](http://test.swgtitan.org:1526)**.
+Full documentation: [API.md](API.md). Live API demo: **[`<your-api-host>:<port>`](http://localhost:3000)**.
 
 All **public (non-admin)** routes:
 
