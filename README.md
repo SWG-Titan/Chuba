@@ -2,7 +2,7 @@
 
 A Node.js web application for **SWG (Star Wars Galaxies)** server emulators. It provides resource tracking, schematic browsing, item lookup, quest journal, terrain mapping, and player/city administration.
 
-> **Compatibility note:** Chuba was originally built for **SWG: Titan**. If you are running another emulator stack, replace all deployment-specific references (auth URLs, status URLs, hostnames, branding text, and related config) to match your environment.
+> **Compatibility note:** Chuba was originally built for **SWG: Titan**. If you are running another Star Wars Galaxies server, replace all deployment-specific references (auth URLs, status URLs, hostnames, branding text, and related config) to match your environment.
 
 ---
 
