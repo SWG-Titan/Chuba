@@ -217,6 +217,149 @@ Use **Admin Panel → Paths** to verify that configured paths exist and are read
 
 ---
 
+## How to Use Chuba
+
+This section covers daily usage for both regular users and admins.
+
+### First launch checklist
+
+1. Start the app with `npm start`.
+2. Open `http://localhost:3000` (or your configured host/port).
+3. Log in with your Titan account.
+4. Verify data is loading:
+   - `Dashboard` shows server status/player history.
+   - `Resources` returns current resources.
+   - `Schematic Datapad`, `Armory`, and `Quest Journal` show data from local files.
+5. If something is missing, open **Admin Panel → Paths** and confirm configured paths exist.
+
+### User guide (non-admin)
+
+#### Dashboard
+
+- Use for a quick health view and player-count trend.
+- If chart data is empty, status polling or Oracle connectivity is likely missing.
+
+#### Resources
+
+- Search by name/class and filter active resources.
+- Use class view + stat filters to find best crafting candidates.
+- Open a resource to inspect detailed stats and usage context.
+
+#### Schematic Datapad
+
+- Search by schematic name/category.
+- Open a schematic to inspect slots and ingredient requirements.
+- Use **Best Resources** to match current resources against slot weights.
+- Use model preview to inspect crafted object appearance when templates are resolvable.
+
+#### Armory
+
+- Search by name/template/category/type.
+- Use sort and column controls for focused comparisons.
+- Open item details to inspect derived stats and effects.
+
+#### Quest Journal
+
+- Filter by level, category, planet, tier, type, and reward presence.
+- Open quest detail to review full task flow and rewards.
+- Search supports quest names and resolved journal text.
+
+#### Cartographer (Waypoints)
+
+- Select a planet and pan/zoom the map.
+- View synced in-game waypoints plus local waypoints.
+- Create, edit, and delete local waypoints from the map/list.
+- Use search to quickly focus waypoints by name.
+
+#### Lookup
+
+- **Players**: Search character names and open full details/inventory.
+- **Cities**: Browse and inspect city details.
+- **Profile → My Characters**: Shows your characters linked to your station ID.
+
+### Admin guide
+
+Admin features require `adminLevel >= 50`.
+
+#### Operational health and diagnostics
+
+- Review service status, polling health, and aggregate stats.
+- Check error logs and summaries for parser/path/Oracle failures.
+- Use paths verification to catch missing or incorrect data directories.
+
+#### Data refresh and synchronization
+
+- Trigger manual resource polling.
+- Trigger schematic sync from disk.
+- Trigger item sync and stats reload.
+- Trigger waypoint Oracle sync.
+- Reload resource tree and sync resource classes into DB.
+- Refresh template-name cache for faster display resolution.
+
+#### Waypoint and mapping administration
+
+- Configure **LOCATION_SCENE → planet** mappings so Oracle waypoints map correctly.
+- Clear local-only or all waypoints when cleanup is required.
+- Prune duplicate waypoints if map data has repeated entries.
+
+#### Player administration
+
+- Rename character.
+- Move character to new coordinates.
+- Change race/template.
+- Lock/unlock account associated with a character.
+- Inspect object variables for deeper diagnostics.
+
+#### Item display administration
+
+- Hide/show item categories for UI control.
+- Update item column visibility and display metadata.
+
+#### Safety-critical actions
+
+Use with care in non-production first:
+
+- Nuke database (destructive reset).
+- Clear resource history.
+- Clear all resources.
+- Bulk import mapping data.
+
+### Recommended workflows
+
+#### Crafting workflow
+
+1. Find target item/schematic in **Schematic Datapad**.
+2. Review weighted slots and ingredient types.
+3. Use **Resources** filters to find top candidates.
+4. Validate final crafted output in model preview (if available).
+
+#### Character support workflow (admin)
+
+1. Search player in **Lookup → Players**.
+2. Review profile, location, and inventory.
+3. Apply rename/move/race/lock action as needed.
+4. Re-open details to verify the action.
+
+#### Data onboarding workflow (new environment)
+
+1. Configure `.env` paths.
+2. Run `npm run migrate`.
+3. Start app and log in.
+4. Use **Admin Panel → Paths** to validate file availability.
+5. Run manual syncs (resources, schematics, items, waypoints).
+6. Verify each user-facing module has data.
+
+### Troubleshooting by symptom
+
+- **Login works, but pages are empty**: Check file paths and run syncs.
+- **Resources missing**: Confirm Oracle connectivity and resource polling.
+- **Quest names show raw keys**: Verify quest strings path and `.tab` dumps.
+- **Model preview missing**: Verify `CLIENT_DATA_PATH` and `SHARED_BASE_PATH`.
+- **Waypoints missing planet assignment**: Add LOCATION_SCENE mappings.
+- **Frequent parser errors**: Validate source files are complete and readable.
+
+---
+
 ## Scripts
 
 | Command | Description |

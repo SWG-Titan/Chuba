@@ -58,3 +58,40 @@ Thumbs.db
 
 ### Docker ###
 .docker/
+
+# Large local game-data and dump files (do not commit)
+# If these folders are used as local mounts/symlinks for Chuba paths,
+# keep them ignored to avoid accidentally pushing huge binaries.
+dsrc/
+datafiles/
+serverdata/
+clientdata/
+titan/
+imports/
+exports/
+backups/
+dumps/
+
+# Large archives / database dumps
+*.zip
+*.7z
+*.rar
+*.tar
+*.tar.gz
+*.tgz
+*.bz2
+*.xz
+*.sql
+*.sqlite
+*.bak
+*.dump
+
+# Common large binary content
+*.dds
+*.msh
+*.apt
+*.iff
+*.tre
+*.hmap
+*.btrn
+*.trn
