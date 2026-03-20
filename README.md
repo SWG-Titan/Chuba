@@ -1,4 +1,4 @@
-# Chuba – SWG Emulator Tracker
+# Chuba – SWG Source Tracker
 
 A Node.js web application for **SWG (Star Wars Galaxies)** server emulators. It provides resource tracking, schematic browsing, item lookup, quest journal, terrain mapping, and player/city administration.
 
